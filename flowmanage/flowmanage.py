@@ -1,19 +1,121 @@
-from random import randint
 import numpy as np
 
 import bluesky as bs
-from bluesky import core, stack, traf  
-from bluesky.tools import aero, areafilter, geo
+from bluesky.core import Entity
+from bluesky.tools.aero import rho0, g0
 
-# bs.settings.set_variable_defaults(geofence_dtlookahead=30)
+
+# initialize drone stats
+dronebattery = None
 
 def init_plugin():
+    global dronebattery
+    dronebattery = DroneBattery()
+
     config = {
         'plugin_name': 'flowmanage',
         'plugin_type': 'sim',
     }
     return config
 
+
+class DroneBattery(Entity):
+
+    def __init__(self):
+        super().__init__()
+
+        with self.settrafarrays():
+
+            # Battery information
+            self.batt_senergy           = np.array([])              # specific energy of the battery (J/kg)
+            self.batt_eff               = np.array([])              # battery power transfer efficiency
+            self.batt_sfactor           = np.array([])              # safety factor of battery
+            self.depth_discharge        = np.array([])              # depth of discharge of battery
+            self.batt_mass              = np.array([])              # mass of the battery (kg)
+            self.batt_area              = np.array([])              # projected area of the battery (m^2)
+            self.batt_Cd                = np.array([])              # drag coefficient of the battery
+
+            # Rotor information
+            self.blades_per_rotor       = np.array([])              # number of blades in one rotor
+            self.blade_chord_length     = np.array([])              # length of blade chord (m)
+            self.blade_Cl               = np.array([])              # blade lift coefficient
+            self.blade_Cd               = np.array([])              # blade drag coefficient
+            self.n_rotors               = np.array([])              # number of rotors
+            self.disc_area              = np.array([])              # disc area (m^2)
+
+            # drone information
+            self.drone_mass             = np.array([])              # mass of drone body (kg)
+            self.drone_area             = np.array([])              # projected area of the drone body (m^2)
+            self.drone_Cd               = np.array([])              # drag coefficient of drone
+            
+            # payload info
+            self.payload_mass           = np.array([])              # mass of payload (kg)
+            self.payload_area           = np.array([])              # projected area of payload (m^2)
+            self.payload_Cd             = np.array([])              # drag coefficient of the payload
+
+            # general
+            self.lift_to_drag           = np.array([])              # lift to drag ratio
+            self.power_avionics         = np.array([])              # power required for avionics (J/s)
+            self.induced_power_f        = np.array([])              # factor for induced power
+            self.profile_power_f        = np.array([])              # factor for profile power (m/kg)^(1/2)
+            self.rofile_power_v_f       = np.array([])              # factor for profile power due to speed (m/kg)^(-1/2)
+            self.parasite_power_pay_f   = np.array([])              # factor for parasite power with payload (kg/m)
+            self.parasite_power_f       = np.array([])              # factor for parasite power without payload (kg/m)
+            
+    
+    def create(self, n=1):
+        super().create(n)
+
+        # Battery information
+        self.batt_senergy[-n:]           = 540000       
+        self.batt_eff[-n:]               = 0.7
+        self.batt_sfactor[-n:]           = 1.2
+        self.depth_discharge[-n:]        = 0.5
+        self.batt_mass[-n:]              = 10
+        self.batt_area[-n:]              = 0.015
+        self.batt_Cd[-n:]                = 1
+
+        # Rotor information
+        self.blades_per_rotor[-n:]       = 3
+        self.blade_chord_length[-n:]     = 0.1
+        self.blade_Cl[-n:]               = 0.4
+        self.blade_Cd[-n:]               = 0.075
+        self.n_rotors[-n:]               = 8
+        self.disc_area[-n:]              = 0.027
+
+        # drone information
+        self.drone_mass[-n:]             = 7
+        self.drone_area[-n:]             = 0.224
+        self.drone_Cd[-n:]               = 1.49
+        
+        # payload info
+        self.payload_mass[-n:]           = 7
+        self.payload_area[-n:]           = 0.0929
+        self.payload_Cd[-n:]             = 2.2
+
+        # general
+        self.lift_to_drag[-n:]           = 3
+        self.power_avionics[-n:]         = 0
+        self.induced_power_f[-n:]        = 1
+        self.profile_power_f[-n:]        = 0.683
+        self.rofile_power_v_f[-n:]       = 0.0868
+        self.parasite_power_pay_f[-n:]   = 0.339
+        self.parasite_power_f[-n:]       = 0.214
+    
+
+    def stolaroff_model(self):
+
+        # first step is to calculate angle of attack (airspeed, drone rotor) (EQ.15)
+        force_drag = 0.5*rho0*(self.payload_area*self.payload_Cd + self.batt_area*self.batt_Cd + self.drone_area*self.drone_Cd)*np.square(bs.traf.tas)
+        force_grav = g0*(self.payload_mass + self.batt_mass + self.drone_mass)
+        angle_of_attack = np.atan((force_drag)/(force_grav))
+
+        # second step is to calculate the induced speed through disc area
+        trig_term = bs.traf.tas * np.cos(angle_of_attack) + np.square(bs.traf.tas*np.sin(angle_of_attack) + vi)
+        vi = force_grav / (2*self.n_rotors*rho0*self.disc_area)
+
+
+    def update(): ...
 
 '''
 
