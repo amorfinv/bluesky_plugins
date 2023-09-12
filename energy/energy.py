@@ -52,31 +52,39 @@ class DroneEnergy(Entity):
     def create(self, n=1):
         super().create(n)
 
+        specific_energy = 540000 # specific energy capacity 540,000 J/kg
+        battery_mass = 10 # mass of battery kg
+        drone_mass = 7
+        payload_mass = 7 
+        safety_factor = 1.2
+        energy_threshold = 0.1 # 10 percent
+        
         self.spawn_time[-n:] = sim.simt
         
-        self.drone_mass[-n:] = 7
-        self.battery_mass[-n:] = 10
-        self.payload_mass[-n:] = 7
+        self.drone_mass[-n:] = drone_mass
+        self.battery_mass[-n:] = battery_mass
+        self.payload_mass[-n:] = payload_mass
 
-        self.battery_capacity[-n:] = (540000*10)/1.2 # specific energy capacity 540,000 J/kg times mass/ safety factor
-        self.remaining_capacity[-n:] = (540000*10)/1.2
-        self.energy_threshold[-n:] = 0.1*(540000*10)/1.2
+        self.battery_capacity[-n:] = (specific_energy*battery_mass)/safety_factor # specific energy capacity x mass / safety factor
+        self.remaining_capacity[-n:] = (specific_energy*battery_mass)/safety_factor
+        self.energy_threshold[-n:] = energy_threshold*(specific_energy*battery_mass)/safety_factor
 
         self.range_remaining[-n:] = 15000
         self.time_remaining[-n:] = 15000
 
 def update():
     # every time step check if remaining energy is less than threshold
-    drones_to_land = np.where(drone_energy.remaining_capacity < drone_energy.energy_threshold)
+    drones_below_threshold = np.where(drone_energy.remaining_capacity < drone_energy.energy_threshold)
 
     # get drones
     id_array = np.array(bs.traf.id)
     
     # select those with 10 percent
-    drones_to_land = id_array[drones_to_land]
-
-    print(drone_energy.range_remaining/1000)
-
+    drones_to_land = id_array[drones_below_threshold]
+    
+    # if len(drones_to_land):
+    #     print(drone_energy.range_remaining[drones_below_threshold])
+    #     print(drones_to_land)
 
 @timed_function(dt=1)
 def energy_spend():
