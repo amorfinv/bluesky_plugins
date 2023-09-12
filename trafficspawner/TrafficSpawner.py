@@ -30,7 +30,7 @@ def reset():
 class TrafficSpawner(Entity):
     def __init__(self):
         super().__init__()
-        self.target_ntraf = 250
+        self.target_ntraf = 100
         # Load default city
         self.graph, self.edges, self.nodes = self.loadcity('Rotterdam')
         # Traffic ID increment
@@ -75,7 +75,7 @@ class TrafficSpawner(Entity):
         self.create_time[-n:] = [0]*n
     
     def reset(self):
-        self.target_ntraf = 50
+        self.target_ntraf = 100
         # Load default city
         self.graph, self.edges, self.nodes = self.loadcity('Rotterdam')
         # Traffic ID increment
