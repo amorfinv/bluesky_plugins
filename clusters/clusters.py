@@ -1,7 +1,7 @@
 import numpy as np
-from scipy.cluster.vq import vq, kmeans, whiten
-from shapely.geometry import Polygon
+from scipy.cluster.vq import whiten
 from scipy.spatial import ConvexHull
+from shapely.geometry import Polygon
 import geopandas as gpd
 from pyproj import Transformer
 import matplotlib.pyplot as plt
@@ -9,6 +9,10 @@ import matplotlib.pyplot as plt
 import bluesky as bs
 from bluesky.core.simtime import timed_function
 from bluesky import core
+from bluesky.tools.aero import nm
+from plugins.clusters import cluster_algorithms as calgos
+
+from time import time
 
 def init_plugin():
 
@@ -35,43 +39,23 @@ class Clustering(core.Entity):
         
     @timed_function(dt=10)
     def clustering(self):
-        self.kmeansclustering()
-
-    def kmeansclustering(self):
         
-        # Identidy 20 clusters
-        n_clusters = 20
-        # if bs.traf.ntraf < 99:
-        #     return
-        
-        # First step is to convert to meters
+        # First convert the aircraft positions to meters and make observation matrix
         x,y = self.transformer_to_utm.transform(bs.traf.lat, bs.traf.lon)
-        
-        # create the observation matrix
         features = np.column_stack((x, y))
-
+        
         # normalize the observation matrix
         whitened = whiten(features)
-        
-        # calculate the within-cluster sum of squares (WSS) for different values of k
-        wss_values = []
-        k_values = range(1, 10)
-        for k in k_values:
-            centroids, distortion = kmeans(whitened, k)
-            wss_values.append(distortion)
 
-        # calculate the first and second derivatives of the WSS curve
-        first_deriv = np.diff(wss_values)
-        second_deriv = np.diff(first_deriv)
-        
-        # find the elbow point
-        elbow_index = np.argmax(second_deriv) + 2
-        # print("Elbow point is at k=%d" % elbow_index)
-        
-        # cluster the data with the optimal number of clusters
-        optimal_centroids, optimal_distortion = kmeans(whitened, n_clusters)
-        optimal_labels, _ = vq(whitened, optimal_centroids)
+        # do k-means clustering and return the optimal labels
+        optimal_labels = calgos.ward(features)
 
+        # polygonize the clusters
+        polygons = self.polygonize(optimal_labels, features, n_clusters=20)
+
+    
+    def polygonize(self, optimal_labels, features, n_clusters, buffer_dist=bs.settings.asas_pzr*4):
+        
         # loop through all of the clusters and create a polygon
         polygon_data = {'label': [], 'geometry': []}
 
@@ -84,26 +68,29 @@ class Clustering(core.Entity):
                     continue
             hull = ConvexHull(cluster_points)
             polygon = Polygon(cluster_points[ hull.vertices])
+            polygon = polygon.buffer(buffer_dist*nm)
 
             polygon_data['label'].append(optimal_label)
             polygon_data['geometry'].append(polygon)
 
         
 
-            # plt.plot(polygon.exterior.xy[0],polygon.exterior.xy[1])
+            plt.plot(polygon.exterior.xy[0],polygon.exterior.xy[1])
 
-        # create geodataframe
+        # create geodataframe of polygons
         poly_gdf = gpd.GeoDataFrame(polygon_data, crs='EPSG:28992')
 
-        # TODO: buffer polygons? and be smart about intersections
-
+        # check for potential intersections
         *_,intersections = poly_gdf.sindex.query_bulk(poly_gdf['geometry'], predicate="intersects")
 
         if len(intersections) != len(poly_gdf):
              print('self intersecting polygons')
-        # plt.scatter(features[:, 0], features[:, 1], c=optimal_labels)
-        # # plt.scatter(optimal_centroids[:, 0], optimal_centroids[:, 1], s=100, c='r', marker='x')
-        # plt.xlabel('X')
-        # plt.ylabel('Y')
-        # plt.title('Optimal Clustering')
-        # plt.show()
+
+        plt.scatter(features[:, 0], features[:, 1], c=optimal_labels)
+        plt.xlabel('X')
+        plt.ylabel('Y')
+        plt.title('Optimal Clustering')
+        plt.show()
+        
+        return poly_gdf
+
