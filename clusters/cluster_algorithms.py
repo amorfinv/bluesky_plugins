@@ -20,9 +20,10 @@ def affinity(features):
 
     return optimal_labels
 
-def ward(features):
+def ward(features, distance_threshold=3000):
+    "Distance thresold of 3000 metres corresponds to traffic case for clusterings"
     
-    clustering = cluster.AgglomerativeClustering(n_clusters=None, distance_threshold=3000, linkage='ward').fit(features)
+    clustering = cluster.AgglomerativeClustering(n_clusters=None, distance_threshold=distance_threshold, linkage='ward').fit(features)
 
     # optimal labels
     optimal_labels = clustering.labels_

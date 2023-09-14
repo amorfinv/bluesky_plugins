@@ -59,6 +59,10 @@ class M2CD(ConflictDetection):
         # Logging
         self.conflictlog = datalog.crelog('CDR_CONFLICTLOG', None, confheader)
         self.uniqueconfloslog = datalog.crelog('CDR_WASLOSLOG', None, uniqueconflosheader)
+
+        # cluster information
+        self.conf_cluster = []
+        self.los_cluster = []
         
         # Conflict related
         self.prevconfpairs = set()
@@ -85,6 +89,10 @@ class M2CD(ConflictDetection):
         self.tcpamax = np.zeros(bs.traf.ntraf)
         self.dist_mat = np.array([])
         self.qdr_mat = np.array([])
+
+        # cluster information
+        self.conf_cluster = {}
+        self.los_cluster = {}
         
         # Conflict related
         self.prevconfpairs = set()
@@ -113,7 +121,7 @@ class M2CD(ConflictDetection):
         # Update confpairs_unique and lospairs_unique
         self.confpairs_unique = confpairs_unique
         self.lospairs_unique = lospairs_unique    
-        
+
         # Update the logging
         self.update_log()
         
@@ -252,6 +260,26 @@ class M2CD(ConflictDetection):
                 bs.traf.lon[idx2],
                 bs.traf.alt[idx2]
             )
+                
+                # now update the cluster information
+                data_array = np.column_stack(
+                    (
+                        bs.traf.lat[[idx1,idx2]], 
+                        bs.traf.lon[[idx1,idx2]]
+                        )
+                    )
+                if not bs.sim.simt in self.conf_cluster:
+                    self.conf_cluster[str(bs.sim.simt)] = data_array
+                else:
+                    # extend the array
+                    data_array = np.vstack(
+                        (
+                            self.conf_cluster[str(bs.sim.simt)],
+                            data_array
+                            )
+                    )
+                    self.conf_cluster[str(bs.sim.simt)] = data_array
+                # end update the cluster information
             
         # Now check the new LOS
         done_pairs = []
@@ -267,7 +295,27 @@ class M2CD(ConflictDetection):
             if dictkey in done_pairs:
                 # Already done, continue
                 continue
-            
+
+            # now update the cluster information
+            data_array = np.column_stack(
+                (
+                    bs.traf.lat[[idx1,idx2]], 
+                    bs.traf.lon[[idx1,idx2]]
+                    )
+                )
+            if not bs.sim.simt in self.los_cluster:
+                self.los_cluster[str(bs.sim.simt)] = data_array
+            else:
+                # extend the array
+                data_array = np.vstack(
+                    (
+                        self.los_cluster[str(bs.sim.simt)],
+                        data_array
+                        )
+                )
+                self.los_cluster[str(bs.sim.simt)] = data_array
+            # end update the cluster information
+
             done_pairs.append(dictkey)
                 
             # Set the bool as true
