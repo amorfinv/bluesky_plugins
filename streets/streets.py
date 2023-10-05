@@ -5,8 +5,8 @@ Also includes layering information.
 
 import json
 import numpy as np
-from collections import Counter
 import pandas as pd
+import osmnx as ox
 from scipy.sparse import csr_matrix
 from scipy.spatial import KDTree
 import networkx as nx
@@ -21,25 +21,21 @@ from bluesky.traffic import Route
 from plugins.streets import sutils
 
 bs.settings.set_variable_defaults(
-    graph_dir=f'plugins/streets/graphs/rotterdam/')
+    graph_dir=f'plugins/scenario_maker/Rotterdam/')
 
 # defaults
 use_flow_control = True
 
 # create classes
 edge_traffic = None
-flight_layers = None
 path_plans = None
 
 def init_plugin():
     
-    global path_plans, edge_traffic, flight_layers
+    global path_plans, edge_traffic
 
     # Initialize EdgeTraffic
     edge_traffic = EdgeTraffic(bs.settings.graph_dir)
-
-    # Initialize Flight Layers
-    flight_layers = FlightLayers(bs.settings.graph_dir)
 
     # Initialize Path Plans
     path_plans = PathPlans(bs.settings.graph_dir)
@@ -63,9 +59,6 @@ def update():
         
         # Update edege autopilot
         edge_traffic.edgeap.update()
-
-        # update layer tracking
-        flight_layers.layer_tracking()
 
 ####################### RESET FUNCTION ###############################
 
@@ -157,33 +150,22 @@ class EdgeTraffic(Entity):
 
         # Opening nodes.JSON as a dictionary
         with open(f'{graph_dir}nodes.json', 'r') as filename:
-            node_dict = json.load(filename)
+            self.node_dict = json.load(filename)
 
         # reverse dictionary
-        self.node_dict = {v: k for k, v in node_dict.items()}
-
-        # TODO: could comment everything below this line if we don't use it
-        # read constrained node dict
-        with open(f'{graph_dir}constrained_node_dict.json', 'r') as filename:
-            constrained_node_dict = json.load(filename)
-
-        # open constrained edges JSON as a dictionary
-        with open(f'{graph_dir}const_edges.json', 'r') as filename:
-            constrained_edges_dict = json.load(filename)
 
         # Build mapping from node to edges
-        edge_array_df = pd.DataFrame(constrained_edges_dict).T
+        edge_array_df = pd.DataFrame(self.edge_dict).T
         self.edge_to_uv_array = np.array([(x.split('-')[0], x.split('-')[1]) for x in list(edge_array_df.index)], dtype='uint16,uint16')
         self.const_edge_stroke_array = np.array(edge_array_df['stroke_group']).astype(np.int16)
         self.const_edge_flow_array = np.array(edge_array_df['flow_group']).astype(np.int16)
-        self.const_edge_height_allocation_array = np.array(edge_array_df['height_allocation']).astype(np.int8)        
         self.const_edge_speed_limit_array = np.array(edge_array_df['speed_limit']).astype(np.int16)
 
         # build the edge_id_array
         self.const_edge_id_array = np.arange(len(self.edge_to_uv_array), dtype='uint16')
 
         # intialize an empty matrix that is the len of nodes
-        adj_matrix = np.zeros((len(constrained_node_dict), len(constrained_node_dict)), dtype='uint16')
+        adj_matrix = np.zeros((len(self.node_dict), len(self.node_dict)), dtype='uint16')
 
         # populate this matrix (row=node_id, col=node_id) and value at row, col is edge_id
         for j, ids in enumerate(self.edge_to_uv_array):
@@ -227,9 +209,7 @@ class EdgesAp(Entity):
             edge_traffic.actedge.wpedgeid[i], \
             edge_traffic.actedge.intersection_lat[i] , edge_traffic.actedge.intersection_lon[i], \
             edge_traffic.actedge.group_number[i], edge_traffic.actedge.flow_number[i], \
-            edge_traffic.actedge.edge_layer_dict[i], \
-            edge_traffic.actedge.turn_lat[i], edge_traffic.actedge.turn_lon[i], \
-            edge_traffic.actedge.edge_airspace_type[i] = self.edge_rou[i].getnextwp()      
+            edge_traffic.actedge.turn_lat[i], edge_traffic.actedge.turn_lon[i], = self.edge_rou[i].getnextwp()      
 
         # TODO: only calculate for drones that are in constrained airspace
         # get distance of drones to next intersection/turn intersection
@@ -293,11 +273,6 @@ class ActiveEdge(Entity):
             self.group_number = np.array([], dtype=int)
             self.flow_number = np.array([], dtype=int)
 
-            # Open to optimization!
-            self.edge_layer_dict = np.array([], dtype=object)
-
-            self.edge_airspace_type = np.array([], dtype=str)
-
             # speed limit
             self.speed_limit = np.array([], dtype=np.int32)
 
@@ -323,9 +298,6 @@ class ActiveEdge(Entity):
 
         self.group_number[-n:]              = 999
         self.flow_number[-n:]               = 999
-        self.edge_layer_dict[-n:]           = {}
-
-        self.edge_airspace_type[-n:]        = ""
 
         self.speed_limit[-n:]               = 999
 
@@ -354,13 +326,7 @@ class Route_edge(Replaceable):
         self.group_number = []
         self.flow_number = []
 
-        # initialize edge_layer_dict
-        self.edge_layer_dict = []
-
-        # initialize the airspace type
-        self.edge_airspace_type = []
-
-    def addwpt(self, iac, name, wpedgeid ="", group_number="", flow_number="", edge_layer_dict ="", action_lat=48.1351, action_lon=11.582, edge_airspace_type="open"):
+    def addwpt(self, iac, name, wpedgeid ="", group_number="", flow_number="",  action_lat=48.1351, action_lon=11.582):
         """Adds waypoint an returns index of waypoint, lat/lon [deg], alt[m]"""
 
         # For safety
@@ -373,14 +339,14 @@ class Route_edge(Replaceable):
 
         wpidx = self.nwp
 
-        self.addwpt_data(False, wpidx, newname, wpedgeid, group_number, flow_number, edge_layer_dict, action_lat, action_lon, edge_airspace_type)
+        self.addwpt_data(False, wpidx, newname, wpedgeid, group_number, flow_number, action_lat, action_lon)
 
         idx = wpidx
         self.nwp += 1
 
         return idx
 
-    def addwpt_data(self, overwrt, wpidx, wpname, wpedgeid, group_number, flow_number, edge_layer_dict, action_lat, action_lon, edge_airspace_type):
+    def addwpt_data(self, overwrt, wpidx, wpname, wpedgeid, group_number, flow_number, action_lat, action_lon):
         """
         Overwrites or inserts information for a waypoint
         """
@@ -393,20 +359,16 @@ class Route_edge(Replaceable):
             self.wpedgeid[wpidx] = wpedgeid
             self.group_number[wpidx] = group_number
             self.flow_number[wpidx] = flow_number
-            self.edge_layer_dict[wpidx] = edge_layer_dict   
             self.turn_lat[wpidx] = action_lat
             self.turn_lon[wpidx] = action_lon
-            self.edge_airspace_type[wpidx] = edge_airspace_type
 
         else:
             self.wpname.insert(wpidx, wpname)
             self.wpedgeid.insert(wpidx, wpedgeid)
             self.group_number.insert(wpidx, group_number)
             self.flow_number.insert(wpidx, flow_number)
-            self.edge_layer_dict.insert(wpidx, edge_layer_dict)
             self.turn_lat.insert(wpidx, turn_lat)
             self.turn_lon.insert(wpidx, turn_lon)
-            self.edge_airspace_type.insert(wpidx, edge_airspace_type)
 
     def direct(self, idx, wpnam):
         """Set active point to a waypoint by name"""
@@ -429,10 +391,6 @@ class Route_edge(Replaceable):
             # set group_number/flow number and edge layer_dict
             edge_traffic.actedge.group_number[idx] = self.group_number[wpidx]
             edge_traffic.actedge.flow_number[idx] = self.flow_number[wpidx]
-            edge_traffic.actedge.edge_layer_dict[idx] = self.edge_layer_dict[wpidx]
-
-            # set edge airspace type
-            edge_traffic.actedge.edge_airspace_type[idx] = self.edge_airspace_type[wpidx]
 
             return True
         else:
@@ -444,9 +402,6 @@ class Route_edge(Replaceable):
         idx = bs.traf.id2idx(self.acid)
         self.iactwp = bs.traf.ap.route[idx].iactwp
 
-        # get airspace type
-        edge_airspace_type = self.edge_airspace_type[self.iactwp]
-
         # get next edge id
         wpedgeid = self.wpedgeid[self.iactwp]
 
@@ -457,13 +412,12 @@ class Route_edge(Replaceable):
         turn_lat = self.turn_lat[self.iactwp]
         turn_lon = self.turn_lon[self.iactwp]
 
-        # Update group number/flow number and edge_layer_dict
+        # Update group number/flow number a
         group_number = self.group_number[self.iactwp]
         flow_number = self.flow_number[self.iactwp]
-        edge_layer_dict = self.edge_layer_dict[self.iactwp]
 
         return wpedgeid, intersection_lat, intersection_lon, group_number, flow_number,\
-               edge_layer_dict, turn_lat, turn_lon, edge_airspace_type
+            turn_lat, turn_lon
 
     @staticmethod
     def get_available_name(data, name_, len_=2):
@@ -502,149 +456,6 @@ def osmid_to_latlon(osmid , i=2):
     node_lon = float(node_latlon.split("-",1)[1])
 
     return node_lat, node_lon
-######################## FLIGHT LAYER TRACKING ############################
-
-class FlightLayers(Entity):
-    def __init__(self, graph_dir):
-        super().__init__()
-
-        with self.settrafarrays():
-            self.flight_levels                  = np.array([], dtype=int)
-            self.flight_layer_type              = np.array([], dtype=str)
-
-            self.closest_cruise_layer_bottom    = np.array([], dtype=int)
-            self.closest_cruise_layer_top       = np.array([], dtype=int)
-
-            self.closest_turn_layer_bottom      = np.array([], dtype=int)
-            self.closest_turn_layer_top         = np.array([], dtype=int)
-            
-            self.closest_empty_layer_bottom     = np.array([], dtype=int)
-            self.closest_empty_layer_top        = np.array([], dtype=int)
-
-            self.lowest_cruise_layer            = np.array([], dtype=int)
-            self.highest_cruise_layer           = np.array([], dtype=int)
-            
-            self.ac_angle_levels                = np.array([], dtype=float)
-            self.leg_angle_levels               = np.array([], dtype=float)
-            self.next_leg_angle_levels          = np.array([], dtype=float)
-
-            self.open_closest_layer             = np.array([], dtype=int)
-
-
-        self.layer_dict = {}
-
-        # Opening edges.JSON as a dictionary
-        with open(f'{graph_dir}layers.json', 'r') as filename:
-            self.layer_dict = json.load(filename)
-        
-        self.layer_spacing = self.layer_dict['info']['spacing']
-        self.angle_spacing = self.layer_dict['info']['angle_spacing']
-        self.layer_levels = np.array(self.layer_dict['info']['levels'])
-        self.layer_dist_center = self.layer_levels - self.layer_dict['info']['spacing']/2
-
-        # vectorize function to extract layer_info
-        self.layer_info = np.vectorize(self.get_layer_type)
-    
-    def create(self, n=1):
-        super().create(n)
-
-        self.flight_levels[-n:]                 = 0
-        self.flight_layer_type[-n:]             = ""
-
-        self.closest_cruise_layer_top[-n:]      = 0
-        self.closest_cruise_layer_bottom[-n:]   = 0
-
-        self.closest_turn_layer_top[-n:]        = 0
-        self.closest_turn_layer_bottom[-n:]     = 0
-        
-        self.closest_empty_layer_top[-n:]       = 0
-        self.closest_empty_layer_bottom[-n:]    = 0
-
-        self.lowest_cruise_layer[-n:]           = 0
-        self.highest_cruise_layer[-n:]          = 0
-        
-    def layer_tracking(self):
-        
-        # update flight levels
-        self.flight_levels = np.array((np.round((bs.traf.alt/ft) / self.layer_spacing))*self.layer_spacing, dtype=int)
-        
-        self.flight_levels = np.where(self.flight_levels < 0, 30, self.flight_levels)
-        self.flight_levels = np.where(self.flight_levels > 480, 480, self.flight_levels)
-        # update flight layer type
-        edge_layer_dicts = edge_traffic.actedge.edge_layer_dict
-
-        # only go into vectorized function if there is traffic
-        if bs.traf.ntraf > 0:
-            self.flight_layer_type, self.closest_cruise_layer_bottom, self.closest_cruise_layer_top,\
-            self.closest_turn_layer_bottom, self.closest_turn_layer_top,\
-            self.closest_empty_layer_bottom, self.closest_empty_layer_top,\
-            self.lowest_cruise_layer, self.highest_cruise_layer = self.layer_info(self.flight_levels, edge_layer_dicts, 
-                                                        edge_traffic.actedge.edge_airspace_type)
-
-        return
-
-    @staticmethod
-    def get_layer_type(flight_level, edge_layer_dict, airspace_type):
-
-        # print("print",flight_level,edge_layer_dict, airspace_type )
-        # vectorized function to process edge layer dictionary
-        # TODO: maybe access dictionaries here instead of having it
-        # as active waypoint data
-
-        # get correct layer_info_list based on your flight level
-        layer_list = edge_layer_dict[f'{flight_level}']
-        
-        # get layer_type
-        layer_type = layer_list[0]
-
-        # get closest cruise layers
-        closest_cruise_layer_bottom = layer_list[1]
-        closest_cruise_layer_top = layer_list[2]
-
-        if closest_cruise_layer_bottom == '':
-            closest_cruise_layer_bottom = 0
-
-        if closest_cruise_layer_top =='':
-            closest_cruise_layer_top = 0
-
-        # get closest turnlayers
-        closest_turn_layer_bottom = layer_list[3]
-        closest_turn_layer_top = layer_list[4]
-
-        if closest_turn_layer_bottom == '':
-            closest_turn_layer_bottom = 0
-
-        if closest_turn_layer_top =='':
-            closest_turn_layer_top = 0
-            
-        # get closest empty layers
-        closest_empty_layer_bottom = layer_list[5]
-        closest_empty_layer_top = layer_list[6]
-
-        if closest_empty_layer_bottom == '':
-            closest_empty_layer_bottom = 0
-
-        if closest_empty_layer_top =='':
-            closest_empty_layer_top = 0
-
-        # get idx lowest cruise layer and highest
-        idx_lowest_cruise_layer, idx_highest_cruise_layer = 7, 8
-        
-        lowest_cruise_layer = layer_list[idx_lowest_cruise_layer]
-
-        if lowest_cruise_layer == '':
-            lowest_cruise_layer = 0
-        
-        # get highest cruise layer
-        highest_cruise_layer = layer_list[idx_highest_cruise_layer]
-
-        if highest_cruise_layer == '':
-            highest_cruise_layer = 0
-
-        return layer_type, closest_cruise_layer_bottom, closest_cruise_layer_top, \
-            closest_turn_layer_bottom, closest_turn_layer_top, \
-            closest_empty_layer_bottom, closest_empty_layer_top, \
-            lowest_cruise_layer, highest_cruise_layer
 
 ######################### PATH PLANNING #######################
 
@@ -656,8 +467,8 @@ class PathPlans(Entity):
             self.pathplanning = []
 
         # read in graph with networkx from graphml
-        self.graph = sutils.load_graphml(f'{graph_dir}graph.graphml')
-        self.node_gdf, self.edge_gdf = sutils.graph_to_gdfs(self.graph)
+        self.graph = ox.load_graphml(f'{graph_dir}gen_directed.graphml')
+        self.node_gdf, self.edge_gdf = ox.graph_to_gdfs(self.graph)
         
         # get a projected dataframe of the graph
         self.node_gdf_proj = self.node_gdf.to_crs(epsg=32633)
@@ -710,19 +521,13 @@ class PathPlans(Entity):
             # Add the streets stuff            
             wpedgeid = edges[j]
             
-            group_number = edge_traffic.edge_dict[wpedgeid]['height_allocation']
-            edge_layer_type = edge_traffic.edge_dict[wpedgeid]['height_allocation']
-            edge_layer_dict = flight_layers.layer_dict["config"][edge_layer_type]['levels']
             group_number = edge_traffic.edge_dict[wpedgeid]['stroke_group']
             flow_number = edge_traffic.edge_dict[wpedgeid]['flow_group']
 
-            # get the edge_airspace_type
-            edge_airspace_type = 'open'
-
             turn_lat = next_turn[j][1]
             turn_lon = next_turn[j][0]
-            edge_traffic.edgeap.edge_rou[ridx].addwpt(ridx, name, wpedgeid, group_number, flow_number, edge_layer_dict, 
-                                        turn_lat, turn_lon, edge_airspace_type)
+            edge_traffic.edgeap.edge_rou[ridx].addwpt(ridx, name, wpedgeid, group_number, flow_number, 
+                                        turn_lat, turn_lon)
 
         # For this aircraft, manually set the first "next_qdr" in actwp
         # We basically need to find the qdr between the second and the third waypoint, as

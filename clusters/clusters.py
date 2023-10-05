@@ -44,7 +44,7 @@ class Clustering(core.Entity):
         self.polygons_to_draw = []
 
         # case for live traffic clustering
-        self.cluster_case = 'intrusions'
+        self.cluster_case = 'livetraffic'
     
 
     @timed_function(dt=10)
