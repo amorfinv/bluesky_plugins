@@ -18,13 +18,10 @@ from bluesky.tools import geo
 from bluesky.core import Entity, Replaceable
 from bluesky.traffic import Route
 
-from plugins.streets import sutils
+from plugins.utils import pluginutils
 
 bs.settings.set_variable_defaults(
     graph_dir=f'plugins/scenario_maker/Rotterdam/')
-
-# defaults
-use_flow_control = True
 
 # create classes
 edge_traffic = None
@@ -152,8 +149,6 @@ class EdgeTraffic(Entity):
         with open(f'{graph_dir}nodes.json', 'r') as filename:
             self.node_dict = json.load(filename)
 
-        # reverse dictionary
-
         # Build mapping from node to edges
         edge_array_df = pd.DataFrame(self.edge_dict).T
         self.edge_to_uv_array = np.array([(x.split('-')[0], x.split('-')[1]) for x in list(edge_array_df.index)], dtype='uint16,uint16')
@@ -204,30 +199,23 @@ class EdgesAp(Entity):
         # Main autopilot update loop
 
         # See if waypoints have reached their destinations
-        for i in np.where(bs.traf.ap.idxreached)[0]:
+        for i in bs.traf.ap.idxreached:
 
             edge_traffic.actedge.wpedgeid[i], \
             edge_traffic.actedge.intersection_lat[i] , edge_traffic.actedge.intersection_lon[i], \
-            edge_traffic.actedge.group_number[i], edge_traffic.actedge.flow_number[i], \
-            edge_traffic.actedge.turn_lat[i], edge_traffic.actedge.turn_lon[i], = self.edge_rou[i].getnextwp()      
+            edge_traffic.actedge.group_number[i], edge_traffic.actedge.flow_number[i] = self.edge_rou[i].getnextwp()      
 
         # TODO: only calculate for drones that are in constrained airspace
-        # get distance of drones to next intersection/turn intersection
+        # get distance of drones to next intersection
         dis_to_int = geo.kwikdist_matrix(traf.lat, traf.lon, 
                                                     edge_traffic.actedge.intersection_lat, 
                                                     edge_traffic.actedge.intersection_lon)
-        dis_to_turn = geo.kwikdist_matrix(traf.lat, traf.lon, 
-                                                    edge_traffic.actedge.turn_lat, 
-                                                    edge_traffic.actedge.turn_lon)
-        
         # # check for speed limit changes
         if bs.traf.ntraf > 0:
             edge_traffic.actedge.speed_limit = self.update_speed_limits(edge_traffic.actedge.wpedgeid, 
                                                                         bs.traf.type)
-
         # flatten numpy arrays
         edge_traffic.actedge.dis_to_int = np.asarray(dis_to_int).flatten()
-        edge_traffic.actedge.dis_to_turn = np.asarray(dis_to_turn).flatten()
 
         return
 
@@ -254,21 +242,13 @@ class ActiveEdge(Entity):
             # TODO: choose correct dtypes for optimization
             self.wpedgeid = np.array([], dtype="S22")
             self.nextwpedgeid = np.array([], dtype=str)
-            self.nextturnnode = np.array([], dtype=str)
 
             # cosntraint airspace information
             self.intersection_lat = np.array([])
             self.intersection_lon = np.array([])
 
-            self.turn_lat = np.array([])
-            self.turn_lon = np.array([])
-            
             # Distances to next intersection/turn intersection
             self.dis_to_int = np.array([])
-            self.dis_to_turn = np.array([])
-
-            self.dis_to_hdg = np.array([])
-            self.dis_to_const = np.array([])
 
             self.group_number = np.array([], dtype=int)
             self.flow_number = np.array([], dtype=int)
@@ -282,19 +262,11 @@ class ActiveEdge(Entity):
 
         self.wpedgeid[-n:]                  = ""
         self.nextwpedgeid[-n:]              = ""
-        self.nextturnnode[-n:]              = ""
 
         self.intersection_lat[-n:]          = 89.99
         self.intersection_lon[-n:]          = 89.99
 
-        self.turn_lat[-n:]                  = 89.99
-        self.turn_lon[-n:]                  = 89.99
-
         self.dis_to_int[-n:]                = 9999.9
-        self.dis_to_turn[-n:]               = 9999.9
-
-        self.dis_to_hdg[-n:]                = 9999.9
-        self.dis_to_const[-n:]              = 9999.9
 
         self.group_number[-n:]              = 999
         self.flow_number[-n:]               = 999
@@ -318,15 +290,7 @@ class Route_edge(Replaceable):
         # initialize edge id list. osmids of edge
         self.wpedgeid = []
 
-        # initialize location of turn in constrained airspae
-        self.turn_lat = []
-        self.turn_lon = []
-
-        # initialize group_number and flow_number
-        self.group_number = []
-        self.flow_number = []
-
-    def addwpt(self, iac, name, wpedgeid ="", group_number="", flow_number="",  action_lat=48.1351, action_lon=11.582):
+    def addwpt(self, iac, name, wpedgeid =""):
         """Adds waypoint an returns index of waypoint, lat/lon [deg], alt[m]"""
 
         # For safety
@@ -339,36 +303,24 @@ class Route_edge(Replaceable):
 
         wpidx = self.nwp
 
-        self.addwpt_data(False, wpidx, newname, wpedgeid, group_number, flow_number, action_lat, action_lon)
+        self.addwpt_data(False, wpidx, newname, wpedgeid)
 
         idx = wpidx
         self.nwp += 1
 
         return idx
 
-    def addwpt_data(self, overwrt, wpidx, wpname, wpedgeid, group_number, flow_number, action_lat, action_lon):
+    def addwpt_data(self, overwrt, wpidx, wpname, wpedgeid):
         """
         Overwrites or inserts information for a waypoint
         """
-        # Process the type of action lat and lon
-        turn_lat = action_lat
-        turn_lon = action_lon
-
         if overwrt:
             self.wpname[wpidx]  = wpname
             self.wpedgeid[wpidx] = wpedgeid
-            self.group_number[wpidx] = group_number
-            self.flow_number[wpidx] = flow_number
-            self.turn_lat[wpidx] = action_lat
-            self.turn_lon[wpidx] = action_lon
 
         else:
             self.wpname.insert(wpidx, wpname)
             self.wpedgeid.insert(wpidx, wpedgeid)
-            self.group_number.insert(wpidx, group_number)
-            self.flow_number.insert(wpidx, flow_number)
-            self.turn_lat.insert(wpidx, turn_lat)
-            self.turn_lon.insert(wpidx, turn_lon)
 
     def direct(self, idx, wpnam):
         """Set active point to a waypoint by name"""
@@ -384,13 +336,9 @@ class Route_edge(Replaceable):
             edge_traffic.actedge.intersection_lat[idx], edge_traffic.actedge.intersection_lon[idx] \
                 = osmid_to_latlon(self.wpedgeid[wpidx], 1)
 
-            # distance to next turn
-            edge_traffic.actedge.turn_lat[idx] = self.turn_lat[wpidx]
-            edge_traffic.actedge.turn_lon[idx] = self.turn_lon[wpidx]
-
             # set group_number/flow number and edge layer_dict
-            edge_traffic.actedge.group_number[idx] = self.group_number[wpidx]
-            edge_traffic.actedge.flow_number[idx] = self.flow_number[wpidx]
+            edge_traffic.actedge.group_number[idx] = edge_traffic.edge_dict[self.wpedgeid[wpidx]]['stroke_group']
+            edge_traffic.actedge.flow_number[idx] = edge_traffic.edge_dict[self.wpedgeid[wpidx]]['flow_group']
 
             return True
         else:
@@ -408,16 +356,11 @@ class Route_edge(Replaceable):
         # get lat/lon of next intersection or distnace to constrained airspace
         intersection_lat ,intersection_lon = osmid_to_latlon(wpedgeid, 1)
 
-        # update turn lat and lon
-        turn_lat = self.turn_lat[self.iactwp]
-        turn_lon = self.turn_lon[self.iactwp]
-
         # Update group number/flow number a
-        group_number = self.group_number[self.iactwp]
-        flow_number = self.flow_number[self.iactwp]
+        group_number = edge_traffic.edge_dict[wpedgeid]['stroke_group']
+        flow_number = edge_traffic.edge_dict[wpedgeid]['flow_group']
 
-        return wpedgeid, intersection_lat, intersection_lon, group_number, flow_number,\
-            turn_lat, turn_lon
+        return wpedgeid, intersection_lat, intersection_lon, group_number, flow_number
 
     @staticmethod
     def get_available_name(data, name_, len_=2):
@@ -446,14 +389,12 @@ def osmid_to_latlon(osmid , i=2):
 
     if not i == 2:
         # if given an edge
-        node_id = int(osmid.split("-",1)[i])
+        node_id = osmid.split("-",1)[i]
     else:
         # if given a node
-        node_id = int(osmid)
+        node_id = osmid
 
-    node_latlon = edge_traffic.node_dict[node_id]
-    node_lat = float(node_latlon.split("-",1)[0])
-    node_lon = float(node_latlon.split("-",1)[1])
+    node_lat,node_lon = edge_traffic.node_dict[node_id]
 
     return node_lat, node_lon
 
@@ -485,74 +426,19 @@ class PathPlans(Entity):
     def create(self, n = 1):
         super().create(n)
 
-        acid = bs.traf.id[-1]
-        ridx = -1
-        
-        route, turns, edges, next_turn, turn_speeds, qdr = self.plan_path()
-
-        # set initial bearing
-        bs.traf.hdg[-1] = qdr
-        bs.traf.trk[-1] = qdr
-        
-        # Get needed values
-        acrte = Route._routes.get(acid)
-
-        for j, rte in enumerate(route):
-            lat = rte[0] # deg
-            lon = rte[1] # deg
-            alt = -999
-            spd = -999
-            
-            # Do flyby or flyturn processing
-            if turns[j]:
-                acrte.turnspd = turn_speeds[j]*kts
-                acrte.swflyby   = False
-                acrte.swflyturn = True
-            else:
-                # Either it's a flyby, or a typo.
-                acrte.swflyby   = True
-                acrte.swflyturn = False
-            
-            name    = acid
-            wptype  = Route.wplatlon
-            
-            acrte.addwpt_simple(ridx, name, wptype, lat, lon, alt, spd)
-        
-            # Add the streets stuff            
-            wpedgeid = edges[j]
-            
-            group_number = edge_traffic.edge_dict[wpedgeid]['stroke_group']
-            flow_number = edge_traffic.edge_dict[wpedgeid]['flow_group']
-
-            turn_lat = next_turn[j][1]
-            turn_lon = next_turn[j][0]
-            edge_traffic.edgeap.edge_rou[ridx].addwpt(ridx, name, wpedgeid, group_number, flow_number, 
-                                        turn_lat, turn_lon)
-
-        # For this aircraft, manually set the first "next_qdr" in actwp
-        # We basically need to find the qdr between the second and the third waypoint, as
-        # the first one is the origin
-        if len(acrte.wplat)>2:
-            bs.traf.actwp.next_qdr[ridx], _ = geo.qdrdist(acrte.wplat[1], acrte.wplon[1],
-                                                        acrte.wplat[2], acrte.wplon[2])
-            
-        # Calculate flight plan
-        acrte.calcfp()
-        edge_traffic.edgeap.edge_rou[ridx].direct(ridx,edge_traffic.edgeap.edge_rou[ridx].wpname[1])
-
-        self.pathplanning[-1] = ...
+        self.pathplanning[-n:] = (0,)
 
 
     def plan_path(self) -> None:
         
         # todo: CREM2 with nearest nodes
-        orig_node = sutils.nearest_nodes(self.kdtree, self.node_gdf_proj, self.origin[1], self.origin[0])
-        dest_node = sutils.nearest_nodes(self.kdtree, self.node_gdf_proj, self.destination[1], self.destination[0])
+        orig_node = ox.nearest_nodes(self.graph, self.node_gdf_proj, self.origin[1], self.origin[0])
+        dest_node = ox.nearest_nodes(self.graph, self.node_gdf_proj, self.destination[1], self.destination[0])
         node_route = nx.shortest_path(self.graph, orig_node, dest_node, method='dijkstra')
 
         # get lat and lon from route and turninfo
-        lats, lons, edges, _ = sutils.lat_lon_from_nx_route(self.graph, node_route)
-        turn_bool, turn_speed, turn_coords = sutils.get_turn_arrays(lats, lons)
+        lats, lons, edges, _ = pluginutils.lat_lon_from_nx_route(self.graph, node_route)
+        turn_bool, turn_speed, turn_coords = pluginutils.get_turn_arrays(lats, lons)
         
         # lat lon route
         route = list(zip(lats, lons))

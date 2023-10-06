@@ -1,3 +1,10 @@
+import numpy as np
+import geopandas as gpd
+import osmnx as ox
+import os
+import pickle
+import random
+
 import bluesky as bs
 from bluesky.core import Entity, timed_function
 from bluesky.stack import command
@@ -6,12 +13,8 @@ from bluesky.tools.geo import kwikqdrdist, kwikdist_matrix, qdrpos, kwikdist
 from bluesky.tools.aero import kts, ft, fpm, nm
 from bluesky.traffic import Route
 from bluesky.tools.misc import degto180
-import numpy as np
-import geopandas as gpd
-import osmnx as ox
-import os
-import pickle
-import random
+
+from plugins.utils import pluginutils
 
 def init_plugin():
     # Configuration parameters
@@ -137,6 +140,12 @@ class TrafficSpawner(Entity):
         nodes['y'] = nodes['geometry'].apply(lambda x: x.y)
 
         G = ox.graph_from_gdfs(nodes, edges)
+
+        # convert both to CRS:28992
+        edges_transformed = edges.to_crs('EPSG:28992')
+        nodes_transformed = nodes.to_crs('EPSG:28992')
+        # force create spatial index
+        edges_transformed.sindex
         
         # bs.stack.stack(f'SCHEDULE 00:00:00 PAN {self.city_centre_coords[0]},{self.city_centre_coords[1]}')
         # bs.stack.stack(f'SCHEDULE 00:00:00 ZOOM 15')
@@ -149,7 +158,7 @@ class TrafficSpawner(Entity):
         # bs.stack.stack(f'SCHEDULE 00:00:00 STARTLOGS')
         # bs.stack.stack(f'SCHEDULE 00:00:00 STARTCDRLOGS')
         # bs.stack.stack(f'HOLD')
-        return G, edges, nodes
+        return G, edges_transformed, nodes_transformed
     
     @command
     def trafficnumber(self, target_ntraf = 50):
@@ -178,6 +187,9 @@ class TrafficSpawner(Entity):
     
     @timed_function(dt = 1)
     def spawn_traffic(self):
+        # load edge traffic for use
+        streets = pluginutils.access_plugin_object('streets')
+        
         '''Function to spawn traffic to maintain a traffic level equal to ntraf.'''
         attempts = 0
 
@@ -219,9 +231,9 @@ class TrafficSpawner(Entity):
             
             # Add the edges to this guy
             self.route_edges[acidx] = edges
-            
+
             # Start adding waypoints
-            for lat, lon, turn in zip(lats, lons, turns):
+            for edgeid, lat, lon, turn in zip(edges, lats, lons, turns):
                 if turn:
                     acrte.turnspd = 5 * kts
                     acrte.swflyby = False
@@ -232,9 +244,16 @@ class TrafficSpawner(Entity):
                     
                 wptype  = Route.wplatlon
                 acrte.addwpt_simple(acidx, acid, wptype, lat, lon, self.alt, self.spd)
+
+                # Add the streets stuff
+                edgeidx = '-'.join(map(str, edgeid))
+
+                streets.edge_traffic.edgeap.edge_rou[acidx].addwpt(acidx, acid, edgeidx)
             
             # Calculate the flight plan
             acrte.calcfp()
+            streets.edge_traffic.edgeap.edge_rou[acidx].direct(acidx,streets.edge_traffic.edgeap.edge_rou[acidx].wpname[1])
+
             # Turn lnav on for this aircraft
             stack.stack(f'LNAV {acid} ON')
             stack.stack(f'VNAV {acid} ON')

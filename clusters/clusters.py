@@ -3,8 +3,10 @@ from scipy.cluster.vq import whiten
 from scipy.spatial import ConvexHull
 from shapely.geometry import Polygon
 import geopandas as gpd
+import pandas as pd
 from pyproj import Transformer
 import matplotlib.pyplot as plt
+from collections import Counter
 
 import bluesky as bs
 from bluesky.core.simtime import timed_function
@@ -12,8 +14,7 @@ from bluesky import core
 from bluesky.tools.aero import nm
 from bluesky.tools import areafilter as af
 from plugins.clusters import cluster_algorithms as calgos
-
-from time import sleep
+from plugins.utils import pluginutils
 
 clustering = None
 
@@ -45,6 +46,18 @@ class Clustering(core.Entity):
 
         # case for live traffic clustering
         self.cluster_case = 'livetraffic'
+
+        # minimum number of aircraft to be considered a cluster
+        self.min_ntraf = 2
+
+        with self.settrafarrays():
+                
+            self.cluster_labels = np.array([])
+  
+    def create(self, n=1):
+        super().create(n)
+        self.cluster_labels[-n:] = -1
+
     
 
     @timed_function(dt=10)
@@ -59,6 +72,9 @@ class Clustering(core.Entity):
     def clustering(self):
         
         features = np.array([])
+
+        if bs.traf.ntraf < 2:
+            return
 
         if self.cluster_case == 'livetraffic':
             # First convert the aircraft positions to meters and make observation matrix
@@ -118,16 +134,79 @@ class Clustering(core.Entity):
 
         # do k-means clustering and return the optimal labels
         optimal_labels = calgos.ward(features, distance_threshold)
-
         # get number of clusters
         n_clusters = np.max(optimal_labels)+1
 
-        # polygonize the clusters
+        # polygonize cluster the clusters
         polygons = self.polygonize(optimal_labels, features, n_clusters)
+        
+        # get numpy array of aircraft with relevant clusters
+        self.cluster_labels = np.where(
+            np.isin(
+                optimal_labels, 
+                [item for item, count in Counter(optimal_labels).items() if count > self.min_ntraf]
+                ), 
+            optimal_labels, 
+            -1
+                )
+        
+        # now we want to find out which edges intersect with the polygons and update streets plugin
+        # with the new flow group numbers
+        self.edges_intersect(polygons)
 
         # code to plot in matplotlib
-        self.external_plotting(features, optimal_labels)
+        # self.external_plotting(features, optimal_labels)
         
+    def edges_intersect(self, polygons):
+
+        # Check for intersections, Note this returns integer indices
+        poly_indices, edge_indices = bs.traf.TrafficSpawner.edges.sindex.query_bulk(polygons['geometry'], predicate="intersects")
+
+        # Check if there are repeated values in the edge_indices, if yes then an edge is part of several polygons
+        # TODO: fix these case
+        has_repeated_values = len(np.unique(edge_indices)) < len(edge_indices)
+
+        if has_repeated_values:
+            print("The array has repeated values.")
+
+        # convert to regular index
+        poly_indices = polygons.iloc[poly_indices].index.to_numpy()
+        edge_indices = bs.traf.TrafficSpawner.edges.iloc[edge_indices].index
+        edge_index_strings = [f'{u}-{v}' for u, v, key in edge_indices]
+
+        # create a geoseries using the poly indices to merge it with the original edge_gdf
+        new_series = pd.Series(poly_indices, index=edge_indices)
+
+        # merge the dataframes and create a new one with the flow_group info
+        new_edges = pd.merge(
+            bs.traf.TrafficSpawner.edges, 
+            new_series.to_frame(name='flow_group'), 
+            left_index=True, 
+            right_index=True,
+            how='left')
+        
+        # now update the edge_dict in streets plugin with "flow group"
+        edge_traffic = pluginutils.access_plugin_object('streets').edge_traffic
+
+        for key, value in edge_traffic.edge_dict.items():
+            if key in edge_index_strings:
+                index = edge_index_strings.index(key)
+                value["flow_group"] = poly_indices[index]
+            else:
+                value["flow_group"] = -1        
+
+
+        # next step is to update the flow_number in the "streets" plugin
+        for idx, _ in enumerate(bs.traf.id):
+            edgeid = edge_traffic.actedge.wpedgeid[idx]
+
+            if self.cluster_labels[idx] >= 0:
+
+                edge_traffic.actedge.flow_number[idx] = edge_traffic.edge_dict[edgeid]['flow_group']
+            else:
+                edge_traffic.actedge.flow_number[idx] = -1
+
+            
 
     def polygonize(self, optimal_labels, features, n_clusters, buffer_dist=bs.settings.asas_pzr*4):
         
@@ -138,8 +217,8 @@ class Clustering(core.Entity):
             label_mask = optimal_labels == optimal_label
             cluster_points = features[label_mask,:]
 
-            # skip if less than 3 points
-            if cluster_points.shape[0] < 3:
+            # skip if less than minimum
+            if cluster_points.shape[0] <= self.min_ntraf:
                     continue
             hull = ConvexHull(cluster_points)
             polygon = Polygon(cluster_points[hull.vertices])
@@ -148,13 +227,13 @@ class Clustering(core.Entity):
             polygon_data['label'].append(optimal_label)
             polygon_data['geometry'].append(polygon)
 
-
             # save polygons to draw later
             self.polygons_to_draw.append((f'CLUSTER{optimal_label}', polygon))
 
         # create geodataframe of polygons
-        poly_gdf = gpd.GeoDataFrame(polygon_data, crs='EPSG:28992')
+        poly_gdf = gpd.GeoDataFrame(polygon_data, index=polygon_data['label'], crs='EPSG:28992')
 
+        # set the lavels as the index
         # # check for potential intersections
         # *_,intersections = poly_gdf.sindex.query_bulk(poly_gdf['geometry'], predicate="intersects")
         # if len(intersections) != len(poly_gdf):
@@ -170,7 +249,6 @@ class Clustering(core.Entity):
             lat, lon = self.transformer_to_latlon.transform(*polygon.exterior.coords.xy)
             coordinates = [x for pair in zip(lat, lon) for x in pair]
             af.defineArea(areaname, 'POLY', coordinates)
-
 
     def external_plotting(self, features, optimal_labels):
         for _, polygon in self.polygons_to_draw: 
