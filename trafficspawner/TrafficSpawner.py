@@ -191,6 +191,7 @@ class TrafficSpawner(Entity):
     @timed_function(dt = 1)
     def spawn_traffic(self):
         # load edge traffic for use
+        # TODO: check for potential replans
         streets = pluginutils.access_plugin_object('streets')
         
         '''Function to spawn traffic to maintain a traffic level equal to ntraf.'''

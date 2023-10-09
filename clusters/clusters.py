@@ -2,6 +2,7 @@ import numpy as np
 from scipy.cluster.vq import whiten
 from scipy.spatial import ConvexHull
 from shapely.geometry import Polygon
+import osmnx as ox
 import geopandas as gpd
 import pandas as pd
 from pyproj import Transformer
@@ -160,15 +161,55 @@ class Clustering(core.Entity):
         
         # now we want to find out which edges intersect with the polygons and update streets plugin
         # with the new flow group numbers
-        new_edges, self.cluster_edges = self.edges_intersect(polygons, edge_traffic)
+        new_edges = self.edges_intersect(polygons, edge_traffic)
 
         # calculate densities of the cluster areas
-        self.cluster_polygons = self.calc_densities(polygons, edge_traffic, new_edges)
+        polygons = self.calc_densities(polygons, edge_traffic, new_edges)
 
         # TODO: apply flow control rules so not all clusters need to replan
-        
+        self.cluster_polygons, self.cluster_edges = self.apply_density_rules(polygons, new_edges)
+
         # code to plot in matplotlib
         # self.external_plotting(features, optimal_labels)
+
+    def apply_density_rules(self, polygons, edges_df):
+        
+
+        # TODO: run for a while to check density levels
+        # Three density levels
+        low_linear_density = 3
+        medium_linear_density = 4.5
+        high_linear_density = 6
+
+
+        # Categorize the density into three categories
+        polygons['density_category'] = pd.cut(polygons['ac_linear_density'],
+                                            bins=[float('-inf'), low_linear_density, medium_linear_density, float('inf')],
+                                            labels=['low', 'medium', 'high'])
+        
+
+        # add these categories to the edges_df        
+        merged_df = pd.merge(polygons, edges_df, left_index=True, right_on='flow_group', how='left')
+
+        # Apply conditions based on 'density_category'
+        merged_df['adjusted_length'] = merged_df.apply(lambda row: row['length'] * 1.5 if row['density_category'] == 'medium' 
+                                                                        else (row['length'] * 2 if row['density_category'] == 'high' 
+                                                                                else (row['length'])), axis=1)
+
+        # update the TrafficSpawner graph
+        # TODO: combine these two for loops into one
+
+        # # Update edge attributes in the graph
+        edge_lengths = {row.Index: row.adjusted_length for row in merged_df.itertuples()}
+
+        for edge_label, adjusted_length in edge_lengths.items():
+            bs.traf.TrafficSpawner.graph[edge_label[0]][edge_label[1]][edge_label[2]]['length'] = adjusted_length 
+
+        # select indices of edges in the medium or high category
+        selected_indices = merged_df[merged_df['density_category'].isin(['medium', 'high'])].index
+        selected_indices = [f'{u}-{v}' for u,v,key in selected_indices]
+        
+        return polygons, selected_indices
 
     def calc_densities(self, polygons,edge_traffic, new_edges):
         # TODO: only for livetraffic currently
@@ -250,14 +291,13 @@ class Clustering(core.Entity):
             else:
                 edge_traffic.actedge.flow_number[idx] = -1
         
-        return new_edges_df, np.array(edge_index_strings)
+        return new_edges_df
 
             
-
     def polygonize(self, optimal_labels, features, n_clusters, buffer_dist=bs.settings.asas_pzr*4):
         
         # loop through all of the clusters and create a polygon
-        polygon_data = {'label': [], 'geometry': []}
+        polygon_data = {'flow_group': [], 'geometry': []}
 
         for optimal_label in range(n_clusters):
             label_mask = optimal_labels == optimal_label
@@ -270,14 +310,14 @@ class Clustering(core.Entity):
             polygon = Polygon(cluster_points[hull.vertices])
             polygon = polygon.buffer(buffer_dist*nm)
 
-            polygon_data['label'].append(optimal_label)
+            polygon_data['flow_group'].append(optimal_label)
             polygon_data['geometry'].append(polygon)
 
             # save polygons to draw later
             self.polygons_to_draw.append((f'CLUSTER{optimal_label}', polygon))
 
         # create geodataframe of polygons
-        poly_gdf = gpd.GeoDataFrame(polygon_data, index=polygon_data['label'], crs='EPSG:28992')
+        poly_gdf = gpd.GeoDataFrame(polygon_data, index=polygon_data['flow_group'], crs='EPSG:28992')
 
         # set the lavels as the index
         # # check for potential intersections

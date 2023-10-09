@@ -44,7 +44,12 @@ def init_plugin():
 @core.timed_function(dt=10)
 def do_flowcontrol():
 
+    # select which aircraft need to replan
     aircraft_to_replan()
+
+    # apply new weights to graph
+
+    # replan aircraft that need to replan
 
 def aircraft_to_replan():
     
@@ -58,9 +63,7 @@ def aircraft_to_replan():
         unique_edges = bs.traf.TrafficSpawner.unique_edges[acidx]
 
         if np.any(np.isin(unique_edges,bs.traf.clustering.cluster_edges)):
-            acid_to_replan.append(acid)
-
-    
+            acid_to_replan.append(acid)    
 
 # @core.timed_function(dt=10)
 # def checkclu():
