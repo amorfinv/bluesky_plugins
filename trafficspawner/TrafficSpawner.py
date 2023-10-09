@@ -61,6 +61,7 @@ class TrafficSpawner(Entity):
         
         with self.settrafarrays():
             self.route_edges = []
+            self.unique_edges = []
             # Metrics
             self.distance2D = np.array([])
             self.distance3D = np.array([])
@@ -72,6 +73,7 @@ class TrafficSpawner(Entity):
         super().create(n)
         # Store creation time of new aircraft
         self.route_edges[-n:] = [0]*n # Default edge
+        self.unique_edges[-n:] = [0]*n # Default edge
         self.distance2D[-n:] = [0]*n
         self.distance3D[-n:] = [0]*n
         self.distancealt[-n:] = [0]*n
@@ -106,6 +108,7 @@ class TrafficSpawner(Entity):
         
         with self.settrafarrays():
             self.route_edges = []
+            self.unique_edges = []
             # Metrics
             self.distance2D = np.array([])
             self.distance3D = np.array([])
@@ -231,6 +234,13 @@ class TrafficSpawner(Entity):
             
             # Add the edges to this guy
             self.route_edges[acidx] = edges
+
+            # now create a unique edges dictionary. Doint in this weird manner so that
+            # I am able to persever order
+            # TODO: maybe use stroke groups
+            unique_edges = list({f'{u}-{v}':None for u,v in edges}.keys())
+            self.unique_edges[acidx] = np.array(unique_edges)
+
 
             # Start adding waypoints
             for edgeid, lat, lon, turn in zip(edges, lats, lons, turns):

@@ -44,12 +44,23 @@ def init_plugin():
 @core.timed_function(dt=10)
 def do_flowcontrol():
 
-    streets = pluginutils.access_plugin_object('streets')
+    aircraft_to_replan()
+
+def aircraft_to_replan():
+    
+    # TODO: choose stroke groups to check replan
+    # TODO: select only from current edge to end
+    # select which aircraft should replan
+
+    acid_to_replan = []
+
+    for acidx, acid in enumerate(bs.traf.id):
+        unique_edges = bs.traf.TrafficSpawner.unique_edges[acidx]
+
+        if np.any(np.isin(unique_edges,bs.traf.clustering.cluster_edges)):
+            acid_to_replan.append(acid)
 
     
-    edge_count_dict = dict(Counter(streets.edge_traffic.actedge.wpedgeid))
-    group_count_dict = dict(Counter(streets.edge_traffic.actedge.group_number)) 
-    flow_count_dict = dict(Counter(streets.edge_traffic.actedge.flow_number))
 
 # @core.timed_function(dt=10)
 # def checkclu():

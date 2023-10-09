@@ -22,7 +22,7 @@ def init_plugin():
     global clustering
 
     # Addtional initilisation code
-    clustering = Clustering()
+    bs.traf.clustering = Clustering()
     # Configuration parameters
     config = {
         # The name of your plugin
@@ -50,15 +50,19 @@ class Clustering(core.Entity):
         # minimum number of aircraft to be considered a cluster
         self.min_ntraf = 2
 
+        # polygon data
+        self.cluster_polygons = None
+
+        # edges to check for replanning
+        self.cluster_edges = []
+
         with self.settrafarrays():
-                
             self.cluster_labels = np.array([])
   
     def create(self, n=1):
         super().create(n)
         self.cluster_labels[-n:] = -1
 
-    
 
     @timed_function(dt=10)
     def delete_polygons(self):
@@ -70,7 +74,10 @@ class Clustering(core.Entity):
 
     @timed_function(dt=10)
     def clustering(self):
-        
+
+        # first step is to access the streets plugin
+        # TODO: bs.traf hack?
+        edge_traffic = pluginutils.access_plugin_object('streets').edge_traffic
         features = np.array([])
 
         if bs.traf.ntraf < 2:
@@ -134,6 +141,7 @@ class Clustering(core.Entity):
 
         # do k-means clustering and return the optimal labels
         optimal_labels = calgos.ward(features, distance_threshold)
+        
         # get number of clusters
         n_clusters = np.max(optimal_labels)+1
 
@@ -152,12 +160,46 @@ class Clustering(core.Entity):
         
         # now we want to find out which edges intersect with the polygons and update streets plugin
         # with the new flow group numbers
-        self.edges_intersect(polygons)
+        new_edges, self.cluster_edges = self.edges_intersect(polygons, edge_traffic)
 
+        # calculate densities of the cluster areas
+        self.cluster_polygons = self.calc_densities(polygons, edge_traffic, new_edges)
+
+        # TODO: apply flow control rules so not all clusters need to replan
+        
         # code to plot in matplotlib
         # self.external_plotting(features, optimal_labels)
+
+    def calc_densities(self, polygons,edge_traffic, new_edges):
+        # TODO: only for livetraffic currently
+        # Calcualte the densities
+        flow_count_dict = dict(Counter(edge_traffic.actedge.flow_number))
+
+        # TODO: perform COINS on each individual polygon cluster?
+
+        # get linear length of each edge that is part of flow group
+        grouped_lengths = new_edges.groupby('flow_group')['length'].sum()
+        grouped_lengths = grouped_lengths.drop(-1)
         
-    def edges_intersect(self, polygons):
+        # sort both to make sure it is in correct order
+        grouped_lengths = grouped_lengths.sort_index()
+        polygons = polygons.sort_index()
+
+        # add the lengths as a column
+        polygons['edge_length'] = grouped_lengths
+
+        # add the aircraft counts
+        polygons['ac_count'] = polygons.index.map(flow_count_dict)
+
+        # calculate the linear density
+        polygons['ac_linear_density'] = polygons['ac_count'] / polygons['edge_length'] * 10000
+
+        # calculate the area density
+        polygons['ac_area_density'] = polygons['ac_count'] / polygons['geometry'].area * 1000000
+
+        return polygons
+    
+    def edges_intersect(self, polygons, edge_traffic):
 
         # Check for intersections, Note this returns integer indices
         poly_indices, edge_indices = bs.traf.TrafficSpawner.edges.sindex.query_bulk(polygons['geometry'], predicate="intersects")
@@ -175,36 +217,40 @@ class Clustering(core.Entity):
         edge_index_strings = [f'{u}-{v}' for u, v, key in edge_indices]
 
         # create a geoseries using the poly indices to merge it with the original edge_gdf
-        new_series = pd.Series(poly_indices, index=edge_indices)
+        new_series = pd.Series(poly_indices, index=edge_indices, dtype=int)
 
         # merge the dataframes and create a new one with the flow_group info
-        new_edges = pd.merge(
+        new_edges_df = pd.merge(
             bs.traf.TrafficSpawner.edges, 
             new_series.to_frame(name='flow_group'), 
             left_index=True, 
             right_index=True,
             how='left')
         
-        # now update the edge_dict in streets plugin with "flow group"
-        edge_traffic = pluginutils.access_plugin_object('streets').edge_traffic
+        new_edges_df.fillna(-1, inplace=True)
+        new_edges_df['flow_group'] = new_edges_df['flow_group'].astype(int)
+        new_edges_df['length'] =  new_edges_df['geometry'].apply(lambda x: x.length)
 
+        # next step is to update the flow_number in the "streets" plugin.
+        # update the edge_traffic dictionary
         for key, value in edge_traffic.edge_dict.items():
             if key in edge_index_strings:
                 index = edge_index_strings.index(key)
                 value["flow_group"] = poly_indices[index]
             else:
-                value["flow_group"] = -1        
+                value["flow_group"] = -1   
 
 
-        # next step is to update the flow_number in the "streets" plugin
+        #  Update the active edges as well
         for idx, _ in enumerate(bs.traf.id):
             edgeid = edge_traffic.actedge.wpedgeid[idx]
 
             if self.cluster_labels[idx] >= 0:
-
                 edge_traffic.actedge.flow_number[idx] = edge_traffic.edge_dict[edgeid]['flow_group']
             else:
                 edge_traffic.actedge.flow_number[idx] = -1
+        
+        return new_edges_df, np.array(edge_index_strings)
 
             
 
