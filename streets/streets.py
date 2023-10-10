@@ -105,13 +105,6 @@ def dis2int(acid: 'txt'):
     _, d = geo.qdrdist(traf.lat[idx], traf.lon[idx], node_lat, node_lon)
     
     bs.scr.echo(f'{acid} is {d*nm} meters from node {node_id}')
-    
-@stack.command
-def DELRTEM2(acidx: 'acid' = None):
-
-    # add edge info to stack
-    edge_traffic.edgeap.update_route(acidx)
-    return True
 
 @stack.command
 def streetsenable():
@@ -169,6 +162,9 @@ class EdgeTraffic(Entity):
         # convert to sparse matrix to get the (u,v) to edge_id mapping
         self.uv_to_edge_matrix = csr_matrix(adj_matrix, dtype=np.uint16)
 
+        # assign to self to bs.traf.edgetraffic
+        bs.traf.edgetraffic = self
+
 # "autopilot"
 class EdgesAp(Entity):
     def __init__(self):
@@ -186,13 +182,11 @@ class EdgesAp(Entity):
         for ridx, acid in enumerate(bs.traf.id[-n:]):
             self.edge_rou[ridx - n] = Route_edge(acid)
     
-    def update_route(self, idx):
+    def update_route(self, acid, acidx):
 
-        acid = traf.id[idx]
+        self.edge_rou[acidx] = Route_edge(acid)
 
-        self.edge_rou[idx] = Route_edge(acid)
-
-        traf.ap.route[idx].delrte(idx)
+        traf.ap.route[acidx].delrte(acidx)
         
     def update(self):
         
@@ -201,7 +195,7 @@ class EdgesAp(Entity):
         # See if waypoints have reached their destinations
         for i in bs.traf.ap.idxreached:
 
-            edge_traffic.actedge.wpedgeid[i], \
+            edge_traffic.actedge.wpedgeid[i], edge_traffic.actedge.turn[i], \
             edge_traffic.actedge.intersection_lat[i] , edge_traffic.actedge.intersection_lon[i], \
             edge_traffic.actedge.group_number[i], edge_traffic.actedge.flow_number[i] = self.edge_rou[i].getnextwp()      
 
@@ -243,6 +237,9 @@ class ActiveEdge(Entity):
             self.wpedgeid = np.array([], dtype="S22")
             self.nextwpedgeid = np.array([], dtype=str)
 
+            self.turn = np.array([], dtype=bool)
+
+
             # cosntraint airspace information
             self.intersection_lat = np.array([])
             self.intersection_lon = np.array([])
@@ -262,6 +259,8 @@ class ActiveEdge(Entity):
 
         self.wpedgeid[-n:]                  = ""
         self.nextwpedgeid[-n:]              = ""
+
+        self.turn[-n:]                      = False
 
         self.intersection_lat[-n:]          = 89.99
         self.intersection_lon[-n:]          = 89.99
@@ -289,8 +288,9 @@ class Route_edge(Replaceable):
    
         # initialize edge id list. osmids of edge
         self.wpedgeid = []
+        self.turn = []
 
-    def addwpt(self, iac, name, wpedgeid =""):
+    def addwpt(self, iac, name, wpedgeid ="", turn=False):
         """Adds waypoint an returns index of waypoint, lat/lon [deg], alt[m]"""
 
         # For safety
@@ -303,24 +303,27 @@ class Route_edge(Replaceable):
 
         wpidx = self.nwp
 
-        self.addwpt_data(False, wpidx, newname, wpedgeid)
+        self.addwpt_data(False, wpidx, newname, wpedgeid, turn)
 
         idx = wpidx
         self.nwp += 1
 
         return idx
 
-    def addwpt_data(self, overwrt, wpidx, wpname, wpedgeid):
+    def addwpt_data(self, overwrt, wpidx, wpname, wpedgeid, turn):
         """
         Overwrites or inserts information for a waypoint
         """
         if overwrt:
             self.wpname[wpidx]  = wpname
             self.wpedgeid[wpidx] = wpedgeid
+            self.turn[wpidx] = turn
 
         else:
             self.wpname.insert(wpidx, wpname)
             self.wpedgeid.insert(wpidx, wpedgeid)
+            self.turn.insert(wpidx, turn)
+
 
     def direct(self, idx, wpnam):
         """Set active point to a waypoint by name"""
@@ -331,7 +334,8 @@ class Route_edge(Replaceable):
 
             # set edge id and intersection/turn lon lat for actedge
             edge_traffic.actedge.wpedgeid[idx] = self.wpedgeid[wpidx]
-            
+            edge_traffic.actedge.turn[idx] = self.turn[wpidx]
+
             # distance to next node
             edge_traffic.actedge.intersection_lat[idx], edge_traffic.actedge.intersection_lon[idx] \
                 = osmid_to_latlon(self.wpedgeid[wpidx], 1)
@@ -352,6 +356,7 @@ class Route_edge(Replaceable):
 
         # get next edge id
         wpedgeid = self.wpedgeid[self.iactwp]
+        turn = self.turn[self.iactwp]
 
         # get lat/lon of next intersection or distnace to constrained airspace
         intersection_lat ,intersection_lon = osmid_to_latlon(wpedgeid, 1)
@@ -360,7 +365,7 @@ class Route_edge(Replaceable):
         group_number = edge_traffic.edge_dict[wpedgeid]['stroke_group']
         flow_number = edge_traffic.edge_dict[wpedgeid]['flow_group']
 
-        return wpedgeid, intersection_lat, intersection_lon, group_number, flow_number
+        return wpedgeid, turn, intersection_lat, intersection_lon, group_number, flow_number
 
     @staticmethod
     def get_available_name(data, name_, len_=2):

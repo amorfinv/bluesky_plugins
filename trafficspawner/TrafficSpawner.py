@@ -33,7 +33,7 @@ def reset():
 class TrafficSpawner(Entity):
     def __init__(self):
         super().__init__()
-        self.target_ntraf = 100
+        self.target_ntraf = 10
         # Load default city
         self.graph, self.edges, self.nodes = self.loadcity('Rotterdam')
         # Traffic ID increment
@@ -80,7 +80,7 @@ class TrafficSpawner(Entity):
         self.create_time[-n:] = [0]*n
     
     def reset(self):
-        self.target_ntraf = 100
+        self.target_ntraf = 10
         # Load default city
         self.graph, self.edges, self.nodes = self.loadcity('Rotterdam')
         # Traffic ID increment
@@ -259,7 +259,7 @@ class TrafficSpawner(Entity):
                 # Add the streets stuff
                 edgeidx = '-'.join(map(str, edgeid))
 
-                streets.edge_traffic.edgeap.edge_rou[acidx].addwpt(acidx, acid, edgeidx)
+                streets.edge_traffic.edgeap.edge_rou[acidx].addwpt(acidx, acid, edgeidx, turn)
             
             # Calculate the flight plan
             acrte.calcfp()
