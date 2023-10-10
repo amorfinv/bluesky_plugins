@@ -191,9 +191,15 @@ class EdgesAp(Entity):
     def update(self):
         
         # Main autopilot update loop
-
+        # if bs.traf.ntraf > 0:
+        #     print(edge_traffic.actedge.wpedgeid[1])
         # See if waypoints have reached their destinations
+
+        
         for i in bs.traf.ap.idxreached:
+
+            if i == 1:
+                print('yaya')
 
             edge_traffic.actedge.wpedgeid[i], edge_traffic.actedge.turn[i], \
             edge_traffic.actedge.intersection_lat[i] , edge_traffic.actedge.intersection_lon[i], \
