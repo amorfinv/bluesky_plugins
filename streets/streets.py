@@ -198,9 +198,6 @@ class EdgesAp(Entity):
         
         for i in bs.traf.ap.idxreached:
 
-            if i == 1:
-                print('yaya')
-
             edge_traffic.actedge.wpedgeid[i], edge_traffic.actedge.turn[i], \
             edge_traffic.actedge.intersection_lat[i] , edge_traffic.actedge.intersection_lon[i], \
             edge_traffic.actedge.group_number[i], edge_traffic.actedge.flow_number[i] = self.edge_rou[i].getnextwp()      

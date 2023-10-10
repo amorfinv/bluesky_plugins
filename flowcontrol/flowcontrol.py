@@ -48,7 +48,7 @@ def do_flowcontrol():
     # select which aircraft need to replan
     acid_to_replan = aircraft_to_replan()
 
-    
+    return    
     # replan the planns
     replan(acid_to_replan)
 
@@ -74,7 +74,6 @@ def replan(acid_to_replan):
 
     for acid, acidx in acid_to_replan:
 
-
         # step 1 get current edge of travel
         current_edgeid = bs.traf.edgetraffic.actedge.wpedgeid[acidx]
 
@@ -83,8 +82,14 @@ def replan(acid_to_replan):
 
         # step 3, get the id two edges away as plan will start in that node and find index in current route
         # TODO: move this to streets autopilot update? or just use active_waypoint
-        index_current = np.argwhere(bs.traf.TrafficSpawner.unique_edges[acidx] == current_edgeid)[0][0]
-        plan_edgeid = bs.traf.TrafficSpawner.unique_edges[acidx][index_current+2]
+        index_unique = np.argwhere(bs.traf.TrafficSpawner.unique_edges[acidx] == current_edgeid)[0][0]
+
+        # no replan if near end of route 
+        # TODO: make it smarter
+        if len(bs.traf.TrafficSpawner.unique_edges[acidx][index_unique:]) < 4:
+            return
+
+        plan_edgeid = bs.traf.TrafficSpawner.unique_edges[acidx][index_unique+2]
         index_start_plan = bs.traf.edgetraffic.edgeap.edge_rou[acidx].wpedgeid.index(plan_edgeid)
 
         # NOTE: the current plan should not change from current edgeid to first entry of plan_edgeid which is the index_next_final
