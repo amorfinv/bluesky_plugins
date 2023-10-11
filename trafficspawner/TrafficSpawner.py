@@ -147,6 +147,10 @@ class TrafficSpawner(Entity):
         # convert both to CRS:28992
         edges_transformed = edges.to_crs('EPSG:28992')
         nodes_transformed = nodes.to_crs('EPSG:28992')
+
+        # now add an edge length attribute
+        edges_transformed['length'] =  edges_transformed['geometry'].apply(lambda x: x.length)
+
         # force create spatial index
         edges_transformed.sindex
         
