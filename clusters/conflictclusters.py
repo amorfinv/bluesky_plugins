@@ -41,7 +41,7 @@ def init_plugin():
     # Configuration parameters
     config = {
         # The name of your plugin
-        'plugin_name':     'CLUSTERING',
+        'plugin_name':     'CONFLICTCLUSTERING',
 
         # The type of this plugin. For now, only simulation plugins are possible.
         'plugin_type':     'sim'

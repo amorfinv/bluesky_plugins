@@ -60,6 +60,7 @@ class Clustering(core.Entity):
         self.polygons_to_draw = []
         self.draw_the_polygons = False
 
+        # a working cluster distance is 3000
         self.distance_threshold = 3000
 
         # make observation time to look at past data
@@ -101,65 +102,12 @@ class Clustering(core.Entity):
     @timed_function(dt=10)
     def clustering(self):
 
-        # first step is to access the streets plugin
-        edge_traffic = bs.traf.edgetraffic
-        features = np.array([])
-
         if bs.traf.ntraf < 2:
             return
 
-        if self.cluster_case == 'livetraffic':
-            # First convert the aircraft positions to meters and make observation matrix
-            x,y = self.transformer_to_utm.transform(bs.traf.lat, bs.traf.lon)
-            features = np.column_stack((x, y))
-
-            # distance thresold for ward clustering
-            # a working cluster distance is 3000
-            distance_threshold = 3000
-
-        elif self.cluster_case == 'conflicts':
-
-            # a working cluster distance is 2000
-
-            # make observation matrix with conflicts from the past ten minutes
-            observation_time = 10*60
-            # filter the conflict dictionary to remove items from more than ten minutes ago
-            keys_to_remove = []
-            for past_time in bs.traf.cd.conf_cluster:
-                if  bs.sim.simt - float(past_time) > self.observation_time:
-                    keys_to_remove.append(past_time)
-            
-            for past_time in keys_to_remove:
-                bs.traf.cd.conf_cluster.pop(past_time)
-            
-            # make the observation matrix from the conflicts
-            if len(bs.traf.cd.conf_cluster) > 1:
-                lat_lon_confs = np.vstack(list(bs.traf.cd.conf_cluster.values()))
-                x,y = self.transformer_to_utm.transform(lat_lon_confs[:,0],lat_lon_confs[:,1])
-                features = np.column_stack((x, y))
-                
-                distance_threshold = 2000
-
-        elif self.cluster_case == 'intrusions':
-
-            # make observation matrix with intrusions from the past ten minutes
-            observation_time = 10*60
-            # filter the conflict dictionary to remove items from more than ten minutes ago
-            keys_to_remove = []
-            for past_time in bs.traf.cd.los_cluster:
-                if  bs.sim.simt - float(past_time) > self.observation_time:
-                    keys_to_remove.append(past_time)
-            
-            for past_time in keys_to_remove:
-                bs.traf.cd.los_cluster.pop(past_time)
-            
-            # make the observation matrix from the conflicts
-            if len(bs.traf.cd.los_cluster) > 1:
-                lat_lon_los = np.vstack(list(bs.traf.cd.los_cluster.values()))
-                x,y = self.transformer_to_utm.transform(lat_lon_los[:,0],lat_lon_los[:,1])
-                features = np.column_stack((x, y))
-                
-                distance_threshold = 2000
+        # First convert the aircraft positions to meters and make observation matrix
+        x,y = self.transformer_to_utm.transform(bs.traf.lat, bs.traf.lon)
+        features = np.column_stack((x, y))
 
         if len(features) == 0:
             return
@@ -188,10 +136,10 @@ class Clustering(core.Entity):
         
         # now we want to find out which edges intersect with the polygons and update streets plugin
         # with the new flow group numbers
-        new_edges = self.edges_intersect(polygons, edge_traffic)
+        new_edges = self.edges_intersect(polygons)
 
         # calculate densities of the cluster areas
-        polygons = self.calc_densities(polygons, edge_traffic, new_edges)
+        polygons = self.calc_densities(polygons, new_edges)
 
         # TODO: apply flow control rules so not all clusters need to replan
         self.cluster_polygons, self.cluster_edges = self.apply_density_rules(polygons, new_edges)
@@ -241,10 +189,10 @@ class Clustering(core.Entity):
         
         return polygons, selected_indices
 
-    def calc_densities(self, polygons,edge_traffic, new_edges):
+    def calc_densities(self, polygons, new_edges):
         # TODO: only for livetraffic currently
         # Calcualte the densities
-        flow_count_dict = dict(Counter(edge_traffic.actedge.flow_number))
+        flow_count_dict = dict(Counter(bs.traf.edgetraffic.actedge.flow_number))
 
         # TODO: perform COINS on each individual polygon cluster?
 
@@ -270,7 +218,7 @@ class Clustering(core.Entity):
 
         return polygons
     
-    def edges_intersect(self, polygons, edge_traffic):
+    def edges_intersect(self, polygons):
 
         # Check for intersections, Note this returns integer indices
         poly_indices, edge_indices = bs.traf.TrafficSpawner.edges.sindex.query_bulk(polygons['geometry'], predicate="intersects")
@@ -304,7 +252,7 @@ class Clustering(core.Entity):
 
         # next step is to update the flow_number in the "streets" plugin.
         # update the edge_traffic dictionary
-        for key, value in edge_traffic.edge_dict.items():
+        for key, value in bs.traf.edgetraffic.edge_dict.items():
             if key in edge_index_strings:
                 index = edge_index_strings.index(key)
                 value["flow_group"] = poly_indices[index]
@@ -314,12 +262,12 @@ class Clustering(core.Entity):
 
         #  Update the active edges as well
         for idx, _ in enumerate(bs.traf.id):
-            edgeid = edge_traffic.actedge.wpedgeid[idx]
+            edgeid = bs.traf.edgetraffic.actedge.wpedgeid[idx]
 
             if self.cluster_labels[idx] >= 0:
-                edge_traffic.actedge.flow_number[idx] = edge_traffic.edge_dict[edgeid]['flow_group']
+                bs.traf.edgetraffic.actedge.flow_number[idx] = bs.traf.edgetraffic.edge_dict[edgeid]['flow_group']
             else:
-                edge_traffic.actedge.flow_number[idx] = -1
+                bs.traf.edgetraffic.actedge.flow_number[idx] = -1
         
         return new_edges_df
 
@@ -349,12 +297,6 @@ class Clustering(core.Entity):
 
         # create geodataframe of polygons
         poly_gdf = gpd.GeoDataFrame(polygon_data, index=polygon_data['flow_group'], crs='EPSG:28992')
-
-        # set the lavels as the index
-        # # check for potential intersections
-        # *_,intersections = poly_gdf.sindex.query_bulk(poly_gdf['geometry'], predicate="intersects")
-        # if len(intersections) != len(poly_gdf):
-        #      print('self intersecting polygons')
 
         
         return poly_gdf
@@ -405,13 +347,4 @@ class Clustering(core.Entity):
     def SETCLUSTERDISTANCE(self, dist:int):
         
         self.distance_threshold=dist
-        
-        return
-
-    
-    @command 
-    def SETCLUSTERCASE(self, clustercase:str):
-        
-        self.cluster_case = clustercase
-        
         return
