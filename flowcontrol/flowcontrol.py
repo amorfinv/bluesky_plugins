@@ -48,7 +48,6 @@ def do_flowcontrol():
     # select which aircraft need to replan
     acid_to_replan = aircraft_to_replan()
 
-    return    
     # replan the planns
     replan(acid_to_replan)
 

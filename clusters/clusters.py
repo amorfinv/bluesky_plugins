@@ -12,10 +12,21 @@ from collections import Counter
 import bluesky as bs
 from bluesky.core.simtime import timed_function
 from bluesky import core
+from bluesky.tools import datalog
 from bluesky.tools.aero import nm
 from bluesky.tools import areafilter as af
+from bluesky.stack import command
 from plugins.clusters import cluster_algorithms as calgos
 from plugins.utils import pluginutils
+
+clusterheader = \
+    '#######################################################\n' + \
+    'Cluster log LOG\n' + \
+    'Cluster density statistics\n' + \
+    '#######################################################\n\n' + \
+    'Parameters [Units]:\n' + \
+    'Simulation time [s], ' + \
+    'cluster linear densities [-]\n'
 
 clustering = None
 
@@ -44,6 +55,9 @@ class Clustering(core.Entity):
         self.transformer_to_latlon = Transformer.from_crs("EPSG:28992", "EPSG:4326")
 
         self.polygons_to_draw = []
+        self.draw_the_polygons = False
+
+        self.distance_threshold = 3000
 
         # case for live traffic clustering
         self.cluster_case = 'livetraffic'
@@ -53,6 +67,10 @@ class Clustering(core.Entity):
 
         # polygon data
         self.cluster_polygons = None
+
+        # log cluster data
+        self.clusterlog = datalog.crelog('CLUSTERDENSITIES', None, clusterheader)
+
 
         # edges to check for replanning
         self.cluster_edges = []
@@ -67,6 +85,8 @@ class Clustering(core.Entity):
 
     @timed_function(dt=10)
     def delete_polygons(self):
+        if not self.draw_the_polygons:
+            return
         # first delete the areas from bluesky screen
         for areaname, _ in self.polygons_to_draw:            
             af.deleteArea(areaname)
@@ -141,7 +161,7 @@ class Clustering(core.Entity):
         whitened = whiten(features)
 
         # do k-means clustering and return the optimal labels
-        optimal_labels = calgos.ward(features, distance_threshold)
+        optimal_labels = calgos.ward(features, self.distance_threshold)
         
         # get number of clusters
         n_clusters = np.max(optimal_labels)+1
@@ -168,6 +188,9 @@ class Clustering(core.Entity):
 
         # TODO: apply flow control rules so not all clusters need to replan
         self.cluster_polygons, self.cluster_edges = self.apply_density_rules(polygons, new_edges)
+
+        # cluster logginf
+        self.update_logging()
 
         # code to plot in matplotlib
         # self.external_plotting(features, optimal_labels)
@@ -314,7 +337,8 @@ class Clustering(core.Entity):
             polygon_data['geometry'].append(polygon)
 
             # save polygons to draw later
-            self.polygons_to_draw.append((f'CLUSTER{optimal_label}', polygon))
+            if self.draw_the_polygons:
+                self.polygons_to_draw.append((f'CLUSTER{optimal_label}', polygon))
 
         # create geodataframe of polygons
         poly_gdf = gpd.GeoDataFrame(polygon_data, index=polygon_data['flow_group'], crs='EPSG:28992')
@@ -330,6 +354,9 @@ class Clustering(core.Entity):
 
     @timed_function(dt=10)
     def draw_polygons(self):
+
+        if not self.draw_the_polygons:
+            return
         # draw the polygons
         for areaname, polygon in self.polygons_to_draw:            
             lat, lon = self.transformer_to_latlon.transform(*polygon.exterior.coords.xy)
@@ -345,3 +372,23 @@ class Clustering(core.Entity):
         plt.ylabel('Y')
         plt.title('Optimal Clustering')
         plt.show()        
+
+    def update_logging(self):
+        
+        # print(self.cluster_polygons)
+        linear_densities = self.cluster_polygons['ac_linear_density']
+        self.clusterlog.log(*linear_densities)
+        pass
+
+    @command 
+    def STARTLOG(self):
+        self.clusterlog.start()
+        return
+    
+    @command 
+    def SETCLUSTERDISTANCE(self, dist:int):
+        
+        print(type(dist))
+        self.distance_threshold=dist
+        
+        return
