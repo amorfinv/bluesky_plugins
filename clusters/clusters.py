@@ -26,7 +26,11 @@ clusterheader = \
     '#######################################################\n\n' + \
     'Parameters [Units]:\n' + \
     'Simulation time [s], ' + \
-    'cluster linear densities [-]\n'
+    'Aircraft count [-], ' + \
+    'Geometry [wkt], ' + \
+    'Summed edged length [m], ' + \
+    'Cluster linear densities  [m], ' + \
+    'Cluster area densities [-]\n'
 
 clustering = None
 
@@ -272,8 +276,8 @@ class Clustering(core.Entity):
         # TODO: fix these case
         has_repeated_values = len(np.unique(edge_indices)) < len(edge_indices)
 
-        if has_repeated_values:
-            print("The array has repeated values.")
+        # if has_repeated_values:
+        #     print("The array has repeated values.")
 
         # convert to regular index
         poly_indices = polygons.iloc[poly_indices].index.to_numpy()
@@ -375,9 +379,18 @@ class Clustering(core.Entity):
 
     def update_logging(self):
         
-        # print(self.cluster_polygons)
+        ac_count = self.cluster_polygons['ac_count']
+        geometry = self.cluster_polygons['geometry']
+        edge_length = self.cluster_polygons['edge_length']
         linear_densities = self.cluster_polygons['ac_linear_density']
+        area_densities = self.cluster_polygons['ac_area_density']
+
+        self.clusterlog.log(*ac_count)
+        self.clusterlog.log(*geometry)
+        self.clusterlog.log(*edge_length)
         self.clusterlog.log(*linear_densities)
+        self.clusterlog.log(*area_densities)
+
         pass
 
     @command 
@@ -388,7 +401,6 @@ class Clustering(core.Entity):
     @command 
     def SETCLUSTERDISTANCE(self, dist:int):
         
-        print(type(dist))
         self.distance_threshold=dist
         
         return
