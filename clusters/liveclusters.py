@@ -70,7 +70,7 @@ class Clustering(core.Entity):
         self.cluster_case = 'livetraffic'
 
         # minimum number of aircraft to be considered a cluster
-        self.min_ntraf = 2
+        self.min_ntraf = 3
 
         # polygon data
         self.cluster_polygons = None

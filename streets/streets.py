@@ -191,8 +191,9 @@ class EdgesAp(Entity):
     def update(self):
         
         # Main autopilot update loop
-        # if bs.traf.ntraf > 0:
-        #     print(edge_traffic.actedge.wpedgeid[1])
+        if bs.traf.ntraf == 0:
+            return
+
         # See if waypoints have reached their destinations
 
         
