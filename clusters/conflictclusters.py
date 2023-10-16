@@ -60,7 +60,7 @@ class Clustering(core.Entity):
         self.polygons_to_draw = []
         self.draw_the_polygons = False
 
-        self.distance_threshold = 3000
+        self.distance_threshold = 2000
 
         # make observation time to look at past data
         self.observation_time = 10*60
@@ -105,61 +105,20 @@ class Clustering(core.Entity):
         edge_traffic = bs.traf.edgetraffic
         features = np.array([])
 
-        if bs.traf.ntraf < 2:
-            return
-
-        if self.cluster_case == 'livetraffic':
-            # First convert the aircraft positions to meters and make observation matrix
-            x,y = self.transformer_to_utm.transform(bs.traf.lat, bs.traf.lon)
+        # filter the conflict dictionary to remove items from more than ten minutes ago
+        keys_to_remove = []
+        for past_time in bs.traf.cd.conf_cluster:
+            if  bs.sim.simt - float(past_time) > self.observation_time:
+                keys_to_remove.append(past_time)
+        
+        for past_time in keys_to_remove:
+            bs.traf.cd.conf_cluster.pop(past_time)
+        
+        # make the observation matrix from the conflicts
+        if len(bs.traf.cd.conf_cluster) > 1:
+            lat_lon_confs = np.vstack(list(bs.traf.cd.conf_cluster.values()))
+            x,y = self.transformer_to_utm.transform(lat_lon_confs[:,0],lat_lon_confs[:,1])
             features = np.column_stack((x, y))
-
-            # distance thresold for ward clustering
-            # a working cluster distance is 3000
-            distance_threshold = 3000
-
-        elif self.cluster_case == 'conflicts':
-
-            # a working cluster distance is 2000
-
-            # make observation matrix with conflicts from the past ten minutes
-            observation_time = 10*60
-            # filter the conflict dictionary to remove items from more than ten minutes ago
-            keys_to_remove = []
-            for past_time in bs.traf.cd.conf_cluster:
-                if  bs.sim.simt - float(past_time) > self.observation_time:
-                    keys_to_remove.append(past_time)
-            
-            for past_time in keys_to_remove:
-                bs.traf.cd.conf_cluster.pop(past_time)
-            
-            # make the observation matrix from the conflicts
-            if len(bs.traf.cd.conf_cluster) > 1:
-                lat_lon_confs = np.vstack(list(bs.traf.cd.conf_cluster.values()))
-                x,y = self.transformer_to_utm.transform(lat_lon_confs[:,0],lat_lon_confs[:,1])
-                features = np.column_stack((x, y))
-                
-                distance_threshold = 2000
-
-        elif self.cluster_case == 'intrusions':
-
-            # make observation matrix with intrusions from the past ten minutes
-            observation_time = 10*60
-            # filter the conflict dictionary to remove items from more than ten minutes ago
-            keys_to_remove = []
-            for past_time in bs.traf.cd.los_cluster:
-                if  bs.sim.simt - float(past_time) > self.observation_time:
-                    keys_to_remove.append(past_time)
-            
-            for past_time in keys_to_remove:
-                bs.traf.cd.los_cluster.pop(past_time)
-            
-            # make the observation matrix from the conflicts
-            if len(bs.traf.cd.los_cluster) > 1:
-                lat_lon_los = np.vstack(list(bs.traf.cd.los_cluster.values()))
-                x,y = self.transformer_to_utm.transform(lat_lon_los[:,0],lat_lon_los[:,1])
-                features = np.column_stack((x, y))
-                
-                distance_threshold = 2000
 
         if len(features) == 0:
             return

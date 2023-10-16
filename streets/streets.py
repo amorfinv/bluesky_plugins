@@ -63,7 +63,8 @@ def reset():
     # when reseting bluesky turn off streets
     global streets_bool
     streets_bool = False
-
+    
+    bs.traf.idxreached = []
 ######################## STACK COMMANDS ##########################
 
 @stack.command
