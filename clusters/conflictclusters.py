@@ -351,6 +351,10 @@ class Clustering(core.Entity):
 
     def update_logging(self):
         
+
+        if len(self.cluster_polygons) == 0:
+            return
+
         ac_count = self.cluster_polygons['conf_count']
         geometry = self.cluster_polygons['geometry']
         edge_length = self.cluster_polygons['edge_length']
@@ -363,7 +367,6 @@ class Clustering(core.Entity):
         self.clusterlog.log(*linear_densities)
         self.clusterlog.log(*area_densities)
 
-        pass
 
     @command 
     def STARTLOG(self):
@@ -378,6 +381,13 @@ class Clustering(core.Entity):
         return
 
     
+    @command 
+    def SETOBSERVATIONTIME(self, time:int):
+        
+        self.observation_time = time
+        
+        return
+
     @command 
     def SETCLUSTERCASE(self, clustercase:str):
         
