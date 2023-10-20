@@ -169,11 +169,16 @@ class Clustering(core.Entity):
         # this function checks which aircraft are in which cluster
         # query the polygon and points intersections
         intersections = point_geoseries.sindex.query(polygons['geometry'], predicate='intersects')
+        
+        unique_values, unique_indices = np.unique(intersections[1], return_index=True)
+        intersections_poly = intersections[0][unique_indices]
+        intersections_confs = intersections[1][unique_indices]
+        # i
         # now assign the polygon values to the cluster labels
         mask = np.zeros_like(self.cluster_labels, dtype=bool)
-        mask[intersections[1]] = True
-
-        self.cluster_labels[mask] = intersections[0]
+        mask[intersections_confs] = True
+        
+        self.cluster_labels[mask] = intersections_poly
         self.cluster_labels[~mask] = -1
 
 
