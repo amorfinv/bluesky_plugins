@@ -100,7 +100,9 @@ class Clustering(core.Entity):
 
     @timed_function(dt=10)
     def clustering(self):
-
+        
+        if bs.traf.ntraf == 0 or len(bs.traf.cd.conf_cluster)==0:
+            return
         # First convert the aircraft positions to meters and make observation matrix
         x,y = self.transformer_to_utm.transform(bs.traf.lat, bs.traf.lon)
         # define a geoseries
