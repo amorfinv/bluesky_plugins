@@ -64,7 +64,7 @@ def reset():
     global streets_bool
     streets_bool = False
     
-    bs.traf.idxreached = []
+    bs.traf.ap.idxreached = []
 ######################## STACK COMMANDS ##########################
 
 @stack.command
