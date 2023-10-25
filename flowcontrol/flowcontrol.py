@@ -18,38 +18,50 @@ from bluesky.tools.misc import degto180, txt2tim, txt2alt, txt2spd, lat2txt
 from plugins.utils import pluginutils
 
 # # create classes
-# edge_traffic = None
-# path_plans = None
+flowcontrol = None
 
 def init_plugin():
-    
-    global path_plans, edge_traffic
 
-    # # Initialize EdgeTraffic
-    # edge_traffic = EdgeTraffic(bs.settings.graph_dir)
-
-    # # Initialize Path Plans
-    # path_plans = PathPlans(bs.settings.graph_dir)
+    bs.traf.flowcontrol = FlowControl()
 
     config = {
         'plugin_name'      : 'flowcontrol',
         'plugin_type'      : 'sim',
-        # 'update':          update,
-        # 'reset':           reset
         }
     
     return config
+class FlowControl(core.Entity):
+    def __init__(self):
+        super().__init__() 
+
+        self.replan_time_limit = 60
+
+        with self.settrafarrays():
+            self.last_replan = np.array([])
+  
+    def create(self, n=1):
+        super().create(n)
+        self.last_replan[-n:] = bs.sim.simt
+
 
 ######################## FLOW CONTROL FUNCTIONS #########################
 
 @core.timed_function(dt=10)
 def do_flowcontrol():
 
+    # first apply some geovectors for aircraft
+    apply_geovectors()
+
     # select which aircraft need to replan
     acid_to_replan = aircraft_to_replan()
 
     # replan the planns
     replan(acid_to_replan)
+
+def apply_geovectors():
+
+    pass
+
 
 def aircraft_to_replan():
     
@@ -60,8 +72,17 @@ def aircraft_to_replan():
     acid_to_replan = []
 
     for acidx, acid in enumerate(bs.traf.id):
+
+        # First check that the current aircraft has not done a replan 
+        # within the self.replan time limit
+        replan_time = bs.sim.simt - bs.traf.flowcontrol.last_replan[acidx]
+        if replan_time <  bs.traf.flowcontrol.replan_time_limit:
+            continue
+            
+        # if aircraft has not done a replan then we get their unique travel edges
         unique_edges = bs.traf.TrafficSpawner.unique_edges[acidx]
 
+        # now check if the unique edges are part of the edges that need a replan
         if np.any(np.isin(unique_edges,bs.traf.clustering.cluster_edges)):
             acid_to_replan.append((acid, acidx))
     
@@ -117,6 +138,7 @@ def replan(acid_to_replan):
 
         # step 8: find a new route
         # TODO: merge it into one function with TrafficSpawner
+        # TODO: check if plan actually changed
         # TODO: standardize edges as tuple
         # TODO: replan only affected area? 
         lats, lons, edges, turns = plan_path(int(node_start_plan),int(node_end_plan))
@@ -155,6 +177,9 @@ def replan(acid_to_replan):
         # # Add the turndist back
         if not bs.traf.actwp.flyby[acidx] and bs.traf.actwp.flyturn[acidx]:
             bs.traf.actwp.next_qdr[acidx] = nextqdr_to_remember
+
+        # update the last replan time
+        bs.traf.flowcontrol.last_replan[acidx] = bs.sim.simt
 
 
 def plan_path(orig_node, dest_node) -> None:

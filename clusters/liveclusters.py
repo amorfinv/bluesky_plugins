@@ -70,7 +70,7 @@ class Clustering(core.Entity):
         self.cluster_case = 'livetraffic'
 
         # minimum number of aircraft to be considered a cluster
-        self.min_ntraf = 3
+        self.min_ntraf = 4
 
         # polygon data
         self.cluster_polygons = None
@@ -155,9 +155,9 @@ class Clustering(core.Entity):
 
         # TODO: run for a while to check density levels
         # Three density levels
-        low_linear_density = 3
-        medium_linear_density = 4.5
-        high_linear_density = 6
+        low_linear_density = 0.3
+        medium_linear_density = 0.5
+        high_linear_density = 0.75
 
 
         # Categorize the density into three categories
@@ -175,7 +175,6 @@ class Clustering(core.Entity):
                                                                                 else (row['length'])), axis=1)
 
         # update the TrafficSpawner graph
-        # TODO: combine these two for loops into one
 
         # # Update edge attributes in the graph
         edge_lengths = {row.Index: row.adjusted_length for row in merged_df.itertuples()}
