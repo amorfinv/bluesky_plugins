@@ -69,7 +69,7 @@ class Clustering(core.Entity):
         self.cluster_case = 'livetraffic'
 
         # minimum number of aircraft to be considered a cluster
-        self.min_ntraf = 2
+        self.min_ntraf = 4
 
         # polygon data
         self.cluster_polygons = None
@@ -333,6 +333,9 @@ class Clustering(core.Entity):
             label_mask = optimal_labels == optimal_label
             cluster_points = features[label_mask,:]
 
+            # ensure you only keep unique coordinates
+            cluster_points = np.unique(cluster_points, axis=0)
+            
             # skip if less than minimum
             if cluster_points.shape[0] <= self.min_ntraf:
                     continue

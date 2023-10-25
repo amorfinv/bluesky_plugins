@@ -308,6 +308,9 @@ class Clustering(core.Entity):
             label_mask = optimal_labels == optimal_label
             cluster_points = features[label_mask,:]
 
+            # ensure you only keep unique coordinates
+            cluster_points = np.unique(cluster_points, axis=0)
+            
             # skip if less than minimum
             if cluster_points.shape[0] <= self.min_ntraf:
                     continue
