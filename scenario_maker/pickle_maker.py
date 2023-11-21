@@ -105,7 +105,7 @@ def make_route_pickle(inp):
     
     if dist > min_dist:
         # Create the path for these two nodes
-        route = nx.shortest_path(G, orig_node, dest_node)
+        route = nx.shortest_path(G, orig_node, dest_node, weight='length')
         # Extract the path geometry
         geoms = [edges.loc[(u, v, 0), 'geometry'] for u, v in zip(route[:-1], route[1:])]
         line = linemerge(geoms)
