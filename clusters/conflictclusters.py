@@ -98,7 +98,7 @@ class Clustering(core.Entity):
     @timed_function(dt=10)
     def clustering(self):
         
-        if bs.traf.ntraf == 0 or len(bs.traf.cd.conf_cluster)==0:
+        if bs.traf.ntraf == 0:
             return
         
         # First convert the aircraft positions to meters
@@ -115,6 +115,9 @@ class Clustering(core.Entity):
         
         for past_time in keys_to_remove:
             bs.traf.cd.conf_cluster.pop(past_time)
+
+        if len(bs.traf.cd.conf_cluster) == 0:
+            return
         
         # make the observation matrix from the conflicts
         lat_lon_confs = np.vstack(list(bs.traf.cd.conf_cluster.values()))

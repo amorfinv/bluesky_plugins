@@ -98,7 +98,7 @@ class Clustering(core.Entity):
     @timed_function(dt=10)
     def clustering(self):
 
-        if bs.traf.ntraf == 0 or len(bs.traf.cd.los_cluster)==0:
+        if bs.traf.ntraf == 0:
             return
         
         # First convert the aircraft positions to meters
@@ -117,6 +117,9 @@ class Clustering(core.Entity):
             bs.traf.cd.los_cluster.pop(past_time)
         
         # make the observation matrix from the conflicts
+        if len(bs.traf.cd.los_cluster) == 0:
+            return
+
         lat_lon_los = np.vstack(list(bs.traf.cd.los_cluster.values()))
         x,y = self.transformer_to_utm.transform(lat_lon_los[:,0],lat_lon_los[:,1])
         features = np.column_stack((x, y))
@@ -185,7 +188,7 @@ class Clustering(core.Entity):
         high_linear_density = 6
 
         # Categorize the density into three categories
-        polygons['density_category'] = pd.cut(polygons['ac_linear_density'],
+        polygons['density_category'] = pd.cut(polygons['los_linear_density'],
                                             bins=[float('-inf'), low_linear_density, medium_linear_density, float('inf')],
                                             labels=['low', 'medium', 'high'])
         
