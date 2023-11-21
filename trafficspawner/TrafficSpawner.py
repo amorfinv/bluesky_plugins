@@ -294,29 +294,30 @@ class TrafficSpawner(Entity):
             for acid in acids_to_delete:
                 # Log the stuff for this aircraft in the flstlog
                 idx = bs.traf.id.index(acid)
-                # bs.traf.CDRLogger.flst.log(
-                #     acid,
-                #     self.create_time[idx],
-                #     bs.sim.simt - self.create_time[idx],
-                #     (self.distance2D[idx]),
-                #     (self.distance3D[idx]),
-                #     (self.distancealt[idx]),
-                #     bs.traf.lat[idx],
-                #     bs.traf.lon[idx],
-                #     bs.traf.alt[idx]/ft,
-                #     bs.traf.tas[idx]/kts,
-                #     bs.traf.vs[idx]/fpm,
-                #     bs.traf.hdg[idx],
-                #     bs.traf.cr.active[idx],
-                #     bs.traf.aporasas.alt[idx]/ft,
-                #     bs.traf.aporasas.tas[idx]/kts,
-                #     bs.traf.aporasas.vs[idx]/fpm,
-                #     bs.traf.aporasas.hdg[idx])
+                bs.traf.CDRLogger.flst.log(
+                    acid,
+                    self.create_time[idx],
+                    bs.sim.simt - self.create_time[idx],
+                    (self.distance2D[idx]),
+                    (self.distance3D[idx]),
+                    (self.distancealt[idx]),
+                    bs.traf.lat[idx],
+                    bs.traf.lon[idx],
+                    bs.traf.alt[idx]/ft,
+                    bs.traf.tas[idx]/kts,
+                    bs.traf.vs[idx]/fpm,
+                    bs.traf.hdg[idx],
+                    bs.traf.cr.active[idx],
+                    bs.traf.aporasas.alt[idx]/ft,
+                    bs.traf.aporasas.tas[idx]/kts,
+                    bs.traf.aporasas.vs[idx]/fpm,
+                    bs.traf.aporasas.hdg[idx])
                 stack.stack(f'DEL {acid}')
                 
         if (self.stop_time_enable and bs.sim.simt > self.stop_time) or \
             (self.stop_conf_enable and len(bs.traf.cd.confpairs_all) > self.stop_conf):
             stack.stack(f'HOLD')
+            # print(bs.traf.cd.unique_conf_id_counter)
             stack.stack(f'DELETEALL')
             stack.stack(f'RESET')
             
@@ -341,9 +342,9 @@ class TrafficSpawner(Entity):
                     if (idx2,idx1) in done_pairs:
                         continue
                         
-                    # bs.traf.CDRLogger.conflog.log(pair[0], pair[1],
-                    #                 bs.traf.lat[idx1], bs.traf.lon[idx1],bs.traf.alt[idx1],
-                    #                 bs.traf.lat[idx2], bs.traf.lon[idx2],bs.traf.alt[idx2])
+                    bs.traf.CDRLogger.conflog.log(pair[0], pair[1],
+                                    bs.traf.lat[idx1], bs.traf.lon[idx1],bs.traf.alt[idx1],
+                                    bs.traf.lat[idx2], bs.traf.lon[idx2],bs.traf.alt[idx2])
                 
         self.prevconfpairs = set(bs.traf.cd.confpairs)
         
@@ -393,10 +394,10 @@ class TrafficSpawner(Entity):
                 # Remove this aircraft pair from losmindist
                 self.losmindist.pop(dictkey)
                 #Log the LOS
-                # bs.traf.CDRLogger.loslog.log(losdata[8], losdata[7], pair[0], pair[1],
-                #                 losdata[1], losdata[2],losdata[3],
-                #                 losdata[4], losdata[5],losdata[6],
-                #                 losdata[0])
+                bs.traf.CDRLogger.loslog.log(losdata[8], losdata[7], pair[0], pair[1],
+                                losdata[1], losdata[2],losdata[3],
+                                losdata[4], losdata[5],losdata[6],
+                                losdata[0])
                 
         
         self.prevlospairs = set(bs.traf.cd.lospairs)
@@ -407,3 +408,4 @@ class TrafficSpawner(Entity):
         while bs.traf.ntraf>0:
             bs.traf.delete(0)
         return
+    
