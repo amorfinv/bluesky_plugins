@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.cluster.vq import whiten
 from scipy.spatial import ConvexHull
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, Point
 import osmnx as ox
 import geopandas as gpd
 import pandas as pd
@@ -25,7 +25,7 @@ clusterheader = \
     '#######################################################\n\n' + \
     'Parameters [Units]:\n' + \
     'Simulation time [s], ' + \
-    'Aircraft count [-], ' + \
+    'Intrusion count [-], ' + \
     'Geometry [wkt], ' + \
     'Summed edged length [m], ' + \
     'Cluster linear densities  [m], ' + \
@@ -65,9 +65,6 @@ class Clustering(core.Entity):
         # make observation time to look at past data
         self.observation_time = 10*60
 
-        # case for live traffic clustering
-        self.cluster_case = 'livetraffic'
-
         # minimum number of aircraft to be considered a cluster
         self.min_ntraf = 4
 
@@ -101,73 +98,36 @@ class Clustering(core.Entity):
     @timed_function(dt=10)
     def clustering(self):
 
-        # first step is to access the streets plugin
-        edge_traffic = bs.traf.edgetraffic
-        features = np.array([])
-
-        if bs.traf.ntraf < 2:
+        if bs.traf.ntraf == 0 or len(bs.traf.cd.los_cluster)==0:
             return
+        
+        # First convert the aircraft positions to meters
+        x,y = self.transformer_to_utm.transform(bs.traf.lat, bs.traf.lon)
+        # define a geoseries
+        point_list = [Point(xp,yp) for xp,yp in zip(x,y)]
+        point_geoseries = gpd.GeoSeries(point_list, crs='EPSG:28992')
 
-        if self.cluster_case == 'livetraffic':
-            # First convert the aircraft positions to meters and make observation matrix
-            x,y = self.transformer_to_utm.transform(bs.traf.lat, bs.traf.lon)
-            features = np.column_stack((x, y))
-
-            # distance thresold for ward clustering
-            # a working cluster distance is 3000
-            distance_threshold = 3000
-
-        elif self.cluster_case == 'conflicts':
-
-            # a working cluster distance is 2000
-
-            # make observation matrix with conflicts from the past ten minutes
-            observation_time = 10*60
-            # filter the conflict dictionary to remove items from more than ten minutes ago
-            keys_to_remove = []
-            for past_time in bs.traf.cd.conf_cluster:
-                if  bs.sim.simt - float(past_time) > self.observation_time:
-                    keys_to_remove.append(past_time)
-            
-            for past_time in keys_to_remove:
-                bs.traf.cd.conf_cluster.pop(past_time)
-            
-            # make the observation matrix from the conflicts
-            if len(bs.traf.cd.conf_cluster) > 1:
-                lat_lon_confs = np.vstack(list(bs.traf.cd.conf_cluster.values()))
-                x,y = self.transformer_to_utm.transform(lat_lon_confs[:,0],lat_lon_confs[:,1])
-                features = np.column_stack((x, y))
-                
-                distance_threshold = 2000
-
-        elif self.cluster_case == 'intrusions':
-
-            # make observation matrix with intrusions from the past ten minutes
-            observation_time = 10*60
-            # filter the conflict dictionary to remove items from more than ten minutes ago
-            keys_to_remove = []
-            for past_time in bs.traf.cd.los_cluster:
-                if  bs.sim.simt - float(past_time) > self.observation_time:
-                    keys_to_remove.append(past_time)
-            
-            for past_time in keys_to_remove:
-                bs.traf.cd.los_cluster.pop(past_time)
-            
-            # make the observation matrix from the conflicts
-            if len(bs.traf.cd.los_cluster) > 1:
-                lat_lon_los = np.vstack(list(bs.traf.cd.los_cluster.values()))
-                x,y = self.transformer_to_utm.transform(lat_lon_los[:,0],lat_lon_los[:,1])
-                features = np.column_stack((x, y))
-                
-                distance_threshold = 2000
-
+        # filter the conflict dictionary to remove items from more than observation time
+        keys_to_remove = []
+        for past_time in bs.traf.cd.los_cluster:
+            if  bs.sim.simt - float(past_time) > self.observation_time:
+                keys_to_remove.append(past_time)
+        
+        for past_time in keys_to_remove:
+            bs.traf.cd.los_cluster.pop(past_time)
+        
+        # make the observation matrix from the conflicts
+        lat_lon_los = np.vstack(list(bs.traf.cd.los_cluster.values()))
+        x,y = self.transformer_to_utm.transform(lat_lon_los[:,0],lat_lon_los[:,1])
+        features = np.column_stack((x, y))
+        
         if len(features) == 0:
             return
 
         # normalize the observation matrix
         whitened = whiten(features)
 
-        # do k-means clustering and return the optimal labels
+        # do clustering and return the optimal labels
         optimal_labels = calgos.ward(features, self.distance_threshold)
         
         # get number of clusters
@@ -175,23 +135,19 @@ class Clustering(core.Entity):
 
         # polygonize cluster the clusters
         polygons = self.polygonize(optimal_labels, features, n_clusters)
+
+        if polygons.empty:
+            return
         
-        # get numpy array of aircraft with relevant clusters
-        self.cluster_labels = np.where(
-            np.isin(
-                optimal_labels, 
-                [item for item, count in Counter(optimal_labels).items() if count > self.min_ntraf]
-                ), 
-            optimal_labels, 
-            -1
-                )
-        
+        # here check which aircraft fall within the polygons
+        self.aircraft_intersect(polygons, point_geoseries)
+
         # now we want to find out which edges intersect with the polygons and update streets plugin
         # with the new flow group numbers
-        new_edges = self.edges_intersect(polygons, edge_traffic)
-
+        new_edges = self.edges_intersect(polygons)
+        
         # calculate densities of the cluster areas
-        polygons = self.calc_densities(polygons, edge_traffic, new_edges)
+        polygons = self.calc_densities(polygons, new_edges)
 
         # TODO: apply flow control rules so not all clusters need to replan
         self.cluster_polygons, self.cluster_edges = self.apply_density_rules(polygons, new_edges)
@@ -202,22 +158,37 @@ class Clustering(core.Entity):
         # code to plot in matplotlib
         # self.external_plotting(features, optimal_labels)
 
+    def aircraft_intersect(self, polygons, point_geoseries):
+
+        # this function checks which aircraft are in which cluster
+        # query the polygon and points intersections
+        intersections = point_geoseries.sindex.query(polygons['geometry'], predicate='intersects')
+        
+        unique_values, unique_indices = np.unique(intersections[1], return_index=True)
+        intersections_poly = intersections[0][unique_indices]
+        intersections_confs = intersections[1][unique_indices]
+        # i
+        # now assign the polygon values to the cluster labels
+        mask = np.zeros_like(self.cluster_labels, dtype=bool)
+        mask[intersections_confs] = True
+        
+        self.cluster_labels[mask] = intersections_poly
+        self.cluster_labels[~mask] = -1
+
+
     def apply_density_rules(self, polygons, edges_df):
         
-
         # TODO: run for a while to check density levels
         # Three density levels
         low_linear_density = 3
         medium_linear_density = 4.5
         high_linear_density = 6
 
-
         # Categorize the density into three categories
         polygons['density_category'] = pd.cut(polygons['ac_linear_density'],
                                             bins=[float('-inf'), low_linear_density, medium_linear_density, float('inf')],
                                             labels=['low', 'medium', 'high'])
         
-
         # add these categories to the edges_df        
         merged_df = pd.merge(polygons, edges_df, left_index=True, right_on='flow_group', how='left')
 
@@ -225,10 +196,8 @@ class Clustering(core.Entity):
         merged_df['adjusted_length'] = merged_df.apply(lambda row: row['length'] * 1.5 if row['density_category'] == 'medium' 
                                                                         else (row['length'] * 2 if row['density_category'] == 'high' 
                                                                                 else (row['length'])), axis=1)
-
+        
         # update the TrafficSpawner graph
-        # TODO: combine these two for loops into one
-
         # # Update edge attributes in the graph
         edge_lengths = {row.Index: row.adjusted_length for row in merged_df.itertuples()}
 
@@ -237,16 +206,12 @@ class Clustering(core.Entity):
 
         # select indices of edges in the medium or high category
         selected_indices = merged_df[merged_df['density_category'].isin(['medium', 'high'])].index
-        selected_indices = [f'{u}-{v}' for u,v,key in selected_indices]
+        selected_indices = [f'{u}-{v}' for u,v,_ in selected_indices]
         
         return polygons, selected_indices
 
-    def calc_densities(self, polygons,edge_traffic, new_edges):
-        # TODO: only for livetraffic currently
-        # Calcualte the densities
-        flow_count_dict = dict(Counter(edge_traffic.actedge.flow_number))
-
-        # TODO: perform COINS on each individual polygon cluster?
+    def calc_densities(self, polygons, new_edges):
+        # TODO: use COINS on each individual polygon cluster?
 
         # get linear length of each edge that is part of flow group
         grouped_lengths = new_edges.groupby('flow_group')['length'].sum()
@@ -259,18 +224,15 @@ class Clustering(core.Entity):
         # add the lengths as a column
         polygons['edge_length'] = grouped_lengths
 
-        # add the aircraft counts
-        polygons['ac_count'] = polygons.index.map(flow_count_dict)
-
         # calculate the linear density
-        polygons['ac_linear_density'] = polygons['ac_count'] / polygons['edge_length'] * 10000
+        polygons['los_linear_density'] = polygons['los_count'] / polygons['edge_length'] * 10000
 
         # calculate the area density
-        polygons['ac_area_density'] = polygons['ac_count'] / polygons['geometry'].area * 1000000
+        polygons['los_area_density'] = polygons['los_count'] / polygons['geometry'].area * 1000000
 
         return polygons
     
-    def edges_intersect(self, polygons, edge_traffic):
+    def edges_intersect(self, polygons):
 
         # Check for intersections, Note this returns integer indices
         poly_indices, edge_indices = bs.traf.TrafficSpawner.edges.sindex.query_bulk(polygons['geometry'], predicate="intersects")
@@ -304,7 +266,7 @@ class Clustering(core.Entity):
 
         # next step is to update the flow_number in the "streets" plugin.
         # update the edge_traffic dictionary
-        for key, value in edge_traffic.edge_dict.items():
+        for key, value in bs.traf.edgetraffic.edge_dict.items():
             if key in edge_index_strings:
                 index = edge_index_strings.index(key)
                 value["flow_group"] = poly_indices[index]
@@ -314,21 +276,20 @@ class Clustering(core.Entity):
 
         #  Update the active edges as well
         for idx, _ in enumerate(bs.traf.id):
-            edgeid = edge_traffic.actedge.wpedgeid[idx]
+            edgeid = bs.traf.edgetraffic.actedge.wpedgeid[idx]
 
             if self.cluster_labels[idx] >= 0:
-                edge_traffic.actedge.flow_number[idx] = edge_traffic.edge_dict[edgeid]['flow_group']
+                bs.traf.edgetraffic.actedge.flow_number[idx] = bs.traf.edgetraffic.edge_dict[edgeid]['flow_group']
             else:
-                edge_traffic.actedge.flow_number[idx] = -1
+                bs.traf.edgetraffic.actedge.flow_number[idx] = -1
         
         return new_edges_df
 
-            
     def polygonize(self, optimal_labels, features, n_clusters, buffer_dist=bs.settings.asas_pzr*4):
         
         # loop through all of the clusters and create a polygon
-        polygon_data = {'flow_group': [], 'geometry': []}
-
+        polygon_data = {'flow_group': [], 'geometry': [], 'los_count': []}
+         
         for optimal_label in range(n_clusters):
             label_mask = optimal_labels == optimal_label
             cluster_points = features[label_mask,:]
@@ -345,6 +306,7 @@ class Clustering(core.Entity):
 
             polygon_data['flow_group'].append(optimal_label)
             polygon_data['geometry'].append(polygon)
+            polygon_data['los_count'].append(cluster_points.shape[0])
 
             # save polygons to draw later
             if self.draw_the_polygons:
@@ -358,7 +320,6 @@ class Clustering(core.Entity):
         # *_,intersections = poly_gdf.sindex.query_bulk(poly_gdf['geometry'], predicate="intersects")
         # if len(intersections) != len(poly_gdf):
         #      print('self intersecting polygons')
-
         
         return poly_gdf
 
@@ -385,36 +346,30 @@ class Clustering(core.Entity):
 
     def update_logging(self):
         
-        ac_count = self.cluster_polygons['ac_count']
+        if len(self.cluster_polygons) == 0:
+            return
+
+        los_count = self.cluster_polygons['los_count']
         geometry = self.cluster_polygons['geometry']
         edge_length = self.cluster_polygons['edge_length']
-        linear_densities = self.cluster_polygons['ac_linear_density']
-        area_densities = self.cluster_polygons['ac_area_density']
+        linear_densities = self.cluster_polygons['los_linear_density']
+        area_densities = self.cluster_polygons['los_area_density']
 
-        self.clusterlog.log(*ac_count)
+        self.clusterlog.log(*los_count)
         self.clusterlog.log(*geometry)
         self.clusterlog.log(*edge_length)
         self.clusterlog.log(*linear_densities)
         self.clusterlog.log(*area_densities)
 
-        pass
-
     @command 
     def STARTLOG(self):
         self.clusterlog.start()
-        return
     
     @command 
     def SETCLUSTERDISTANCE(self, dist:int):
-        
         self.distance_threshold=dist
-        
-        return
 
-    
     @command 
     def SETCLUSTERCASE(self, clustercase:str):
-        
         self.cluster_case = clustercase
         
-        return

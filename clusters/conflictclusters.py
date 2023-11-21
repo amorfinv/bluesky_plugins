@@ -65,9 +65,6 @@ class Clustering(core.Entity):
         # make observation time to look at past data
         self.observation_time = 10*60
 
-        # case for live traffic clustering
-        self.cluster_case = 'livetraffic'
-
         # minimum number of aircraft to be considered a cluster
         self.min_ntraf = 3
 
@@ -103,16 +100,14 @@ class Clustering(core.Entity):
         
         if bs.traf.ntraf == 0 or len(bs.traf.cd.conf_cluster)==0:
             return
-        # First convert the aircraft positions to meters and make observation matrix
+        
+        # First convert the aircraft positions to meters
         x,y = self.transformer_to_utm.transform(bs.traf.lat, bs.traf.lon)
         # define a geoseries
         point_list = [Point(xp,yp) for xp,yp in zip(x,y)]
         point_geoseries = gpd.GeoSeries(point_list, crs='EPSG:28992')
         
-        # also put it into a feature matrix
-        features = np.column_stack((x, y))
-
-        # filter the conflict dictionary to remove items from more than ten minutes ago
+        # filter the conflict dictionary to remove items from more than observation time
         keys_to_remove = []
         for past_time in bs.traf.cd.conf_cluster:
             if  bs.sim.simt - float(past_time) > self.observation_time:
@@ -122,10 +117,9 @@ class Clustering(core.Entity):
             bs.traf.cd.conf_cluster.pop(past_time)
         
         # make the observation matrix from the conflicts
-        if len(bs.traf.cd.conf_cluster) > 1:
-            lat_lon_confs = np.vstack(list(bs.traf.cd.conf_cluster.values()))
-            x,y = self.transformer_to_utm.transform(lat_lon_confs[:,0],lat_lon_confs[:,1])
-            features = np.column_stack((x, y))
+        lat_lon_confs = np.vstack(list(bs.traf.cd.conf_cluster.values()))
+        x,y = self.transformer_to_utm.transform(lat_lon_confs[:,0],lat_lon_confs[:,1])
+        features = np.column_stack((x, y))
 
         if len(features) == 0:
             return
@@ -133,7 +127,7 @@ class Clustering(core.Entity):
         # normalize the observation matrix
         whitened = whiten(features)
 
-        # do k-means clustering and return the optimal labels
+        # do clustering and return the optimal labels
         optimal_labels = calgos.ward(features, self.distance_threshold)
 
         # get number of clusters
@@ -183,14 +177,12 @@ class Clustering(core.Entity):
 
 
     def apply_density_rules(self, polygons, edges_df):
-        
 
         # TODO: run for a while to check density levels
         # Three density levels
         low_linear_density = 3
         medium_linear_density = 4.5
         high_linear_density = 6
-
 
         # Categorize the density into three categories
         polygons['density_category'] = pd.cut(polygons['conf_linear_density'],
@@ -206,8 +198,6 @@ class Clustering(core.Entity):
                                                                                 else (row['length'])), axis=1)
 
         # update the TrafficSpawner graph
-        # TODO: combine these two for loops into one
-
         # # Update edge attributes in the graph
         edge_lengths = {row.Index: row.adjusted_length for row in merged_df.itertuples()}
 
@@ -216,15 +206,12 @@ class Clustering(core.Entity):
 
         # select indices of edges in the medium or high category
         selected_indices = merged_df[merged_df['density_category'].isin(['medium', 'high'])].index
-        selected_indices = [f'{u}-{v}' for u,v,key in selected_indices]
+        selected_indices = [f'{u}-{v}' for u,v,_ in selected_indices]
         
         return polygons, selected_indices
 
     def calc_densities(self, polygons, new_edges):
-        # TODO: only for livetraffic currently
-        # Calcualte the densities
-
-        # TODO: perform COINS on each individual polygon cluster?
+        # TODO: use COINS on each individual polygon cluster?
 
         # get linear length of each edge that is part of flow group
         grouped_lengths = new_edges.groupby('flow_group')['length'].sum()
@@ -297,8 +284,7 @@ class Clustering(core.Entity):
                 bs.traf.edgetraffic.actedge.flow_number[idx] = -1
         
         return new_edges_df
-
-            
+  
     def polygonize(self, optimal_labels, features, n_clusters, buffer_dist=bs.settings.asas_pzr*4):
         
         # loop through all of the clusters and create a polygon
@@ -334,7 +320,6 @@ class Clustering(core.Entity):
         # *_,intersections = poly_gdf.sindex.query_bulk(poly_gdf['geometry'], predicate="intersects")
         # if len(intersections) != len(poly_gdf):
         #      print('self intersecting polygons')
-
         
         return poly_gdf
 
@@ -361,46 +346,29 @@ class Clustering(core.Entity):
 
     def update_logging(self):
         
-
         if len(self.cluster_polygons) == 0:
             return
 
-        ac_count = self.cluster_polygons['conf_count']
+        conf_count = self.cluster_polygons['conf_count']
         geometry = self.cluster_polygons['geometry']
         edge_length = self.cluster_polygons['edge_length']
         linear_densities = self.cluster_polygons['conf_linear_density']
         area_densities = self.cluster_polygons['conf_area_density']
 
-        self.clusterlog.log(*ac_count)
+        self.clusterlog.log(*conf_count)
         self.clusterlog.log(*geometry)
         self.clusterlog.log(*edge_length)
         self.clusterlog.log(*linear_densities)
         self.clusterlog.log(*area_densities)
 
-
     @command 
     def STARTLOG(self):
         self.clusterlog.start()
-        return
     
     @command 
     def SETCLUSTERDISTANCE(self, dist:int):
-        
         self.distance_threshold=dist
-        
-        return
-
     
     @command 
     def SETOBSERVATIONTIME(self, time:int):
-        
         self.observation_time = time
-        
-        return
-
-    @command 
-    def SETCLUSTERCASE(self, clustercase:str):
-        
-        self.cluster_case = clustercase
-        
-        return
