@@ -2,7 +2,7 @@ import numpy as np
 from scipy.cluster.vq import whiten
 from scipy.spatial import ConvexHull
 from shapely.geometry import Polygon
-import osmnx as ox
+import json
 import geopandas as gpd
 import pandas as pd
 from pyproj import Transformer
@@ -80,6 +80,11 @@ class Clustering(core.Entity):
 
         # edges to check for replanning
         self.cluster_edges = []
+
+        # load the density dictionary
+        with open(f'{bs.settings.plugin_path}/clusters/densityjsons/livetraffic.json', 'r') as file:
+            # Load the JSON data into a dictionary
+            self.density_dictionary = json.load(file)
 
         with self.settrafarrays():
             self.cluster_labels = np.array([])
