@@ -2,12 +2,11 @@ import numpy as np
 from scipy.cluster.vq import whiten
 from scipy.spatial import ConvexHull
 from shapely.geometry import Polygon, Point
-import osmnx as ox
+import json
 import geopandas as gpd
 import pandas as pd
 from pyproj import Transformer
 import matplotlib.pyplot as plt
-from collections import Counter
 
 import bluesky as bs
 from bluesky.core.simtime import timed_function
@@ -76,6 +75,13 @@ class Clustering(core.Entity):
 
         # edges to check for replanning
         self.cluster_edges = []
+
+        # load the density dictionary
+        with open(f'{bs.settings.plugin_path}/clusters/densityjsons/conflicttraffic.json', 'r') as file:
+            # Load the JSON data into a dictionary
+            self.density_dictionary = json.load(file)
+
+        self.scen_density_dict = {}
 
         with self.settrafarrays():
             self.cluster_labels = np.array([])
@@ -181,11 +187,10 @@ class Clustering(core.Entity):
 
     def apply_density_rules(self, polygons, edges_df):
 
-        # TODO: run for a while to check density levels
-        # Three density levels
-        low_linear_density = 3
-        medium_linear_density = 4.5
-        high_linear_density = 6
+        # anything below this cutoff is low density and above is medium density
+        low_linear_density = self.scen_density_dict['0.25']
+        # anything above this cutoff is high density
+        medium_linear_density = self.scen_density_dict['0.5']
 
         # Categorize the density into three categories
         polygons['density_category'] = pd.cut(polygons['conf_linear_density'],
@@ -371,7 +376,11 @@ class Clustering(core.Entity):
     @command 
     def SETCLUSTERDISTANCE(self, dist:int):
         self.distance_threshold=dist
-    
+
+        # also set the cluster densut dict as this is final stack command
+        target_ntraf = bs.traf.TrafficSpawner.target_ntraf
+        self.scen_density_dict = self.density_dictionary[str[target_ntraf]][str(dist)]
+
     @command 
     def SETOBSERVATIONTIME(self, time:int):
         self.observation_time = time

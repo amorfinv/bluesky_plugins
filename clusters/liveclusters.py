@@ -8,6 +8,7 @@ import pandas as pd
 from pyproj import Transformer
 import matplotlib.pyplot as plt
 from collections import Counter
+from rich.pretty import pprint
 
 import bluesky as bs
 from bluesky.core.simtime import timed_function
@@ -86,6 +87,8 @@ class Clustering(core.Entity):
             # Load the JSON data into a dictionary
             self.density_dictionary = json.load(file)
 
+        self.scen_density_dict = {}
+
         with self.settrafarrays():
             self.cluster_labels = np.array([])
   
@@ -157,12 +160,10 @@ class Clustering(core.Entity):
 
     def apply_density_rules(self, polygons, edges_df):
         
-
-        # TODO: run for a while to check density levels
-        # Three density levels
-        low_linear_density = 0.3
-        medium_linear_density = 0.5
-        high_linear_density = 0.75
+        # anything below this cutoff is low density and above is medium density
+        low_linear_density = self.scen_density_dict['0.25']
+        # anything above this cutoff is high density
+        medium_linear_density = self.scen_density_dict['0.5']
 
 
         # Categorize the density into three categories
@@ -189,7 +190,7 @@ class Clustering(core.Entity):
 
         # select indices of edges in the medium or high category
         selected_indices = merged_df[merged_df['density_category'].isin(['medium', 'high'])].index
-        selected_indices = [f'{u}-{v}' for u,v,key in selected_indices]
+        selected_indices = [f'{u}-{v}' for u,v,_ in selected_indices]
         
         return polygons, selected_indices
 
@@ -345,10 +346,12 @@ class Clustering(core.Entity):
     @command 
     def STARTLOG(self):
         self.clusterlog.start()
-        return
     
     @command 
     def SETCLUSTERDISTANCE(self, dist:int):
         
-        self.distance_threshold=dist
-        return
+        self.distance_threshold = dist
+
+        # also set the cluster densut dict as this is final stack command
+        target_ntraf = bs.traf.TrafficSpawner.target_ntraf
+        self.scen_density_dict = self.density_dictionary[str[target_ntraf]][str(dist)]
