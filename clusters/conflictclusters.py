@@ -76,12 +76,12 @@ class Clustering(core.Entity):
         # edges to check for replanning
         self.cluster_edges = []
 
-        # load the density dictionary
-        with open(f'{bs.settings.plugin_path}/clusters/densityjsons/conflicttraffic.json', 'r') as file:
-            # Load the JSON data into a dictionary
-            self.density_dictionary = json.load(file)
+        # # load the density dictionary
+        # with open(f'{bs.settings.plugin_path}/clusters/densityjsons/conflicttraffic.json', 'r') as file:
+        #     # Load the JSON data into a dictionary
+        #     self.density_dictionary = json.load(file)
 
-        self.scen_density_dict = {}
+        # self.scen_density_dict = {}
 
         with self.settrafarrays():
             self.cluster_labels = np.array([])
@@ -188,9 +188,9 @@ class Clustering(core.Entity):
     def apply_density_rules(self, polygons, edges_df):
 
         # anything below this cutoff is low density and above is medium density
-        low_linear_density = self.scen_density_dict['0.25']
+        low_linear_density = 0.25
         # anything above this cutoff is high density
-        medium_linear_density = self.scen_density_dict['0.5']
+        medium_linear_density = 0.5
 
         # Categorize the density into three categories
         polygons['density_category'] = pd.cut(polygons['conf_linear_density'],
@@ -378,8 +378,8 @@ class Clustering(core.Entity):
         self.distance_threshold=dist
 
         # also set the cluster densut dict as this is final stack command
-        target_ntraf = bs.traf.TrafficSpawner.target_ntraf
-        self.scen_density_dict = self.density_dictionary[str[target_ntraf]][str(dist)]
+        # target_ntraf = bs.traf.TrafficSpawner.target_ntraf
+        # self.scen_density_dict = self.density_dictionary[str[target_ntraf]][str(dist)]
 
     @command 
     def SETOBSERVATIONTIME(self, time:int):
