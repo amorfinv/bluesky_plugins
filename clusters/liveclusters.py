@@ -354,4 +354,4 @@ class Clustering(core.Entity):
 
         # also set the cluster densut dict as this is final stack command
         target_ntraf = bs.traf.TrafficSpawner.target_ntraf
-        self.scen_density_dict = self.density_dictionary[str[target_ntraf]][str(dist)]
+        self.scen_density_dict = self.density_dictionary[str(target_ntraf)][str(dist)]
