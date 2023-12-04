@@ -6,6 +6,7 @@ from scipy.sparse import csr_matrix
 from scipy.spatial import KDTree
 import networkx as nx
 import osmnx as ox
+from itertools import groupby
 
 import bluesky as bs
 from bluesky import core, stack, traf, scr, sim
@@ -27,6 +28,7 @@ def init_plugin():
     config = {
         'plugin_name'      : 'flowcontrol',
         'plugin_type'      : 'sim',
+        'reset'            : bs.traf.flowcontrol.reset()
         }
     
     return config
@@ -35,6 +37,7 @@ class FlowControl(core.Entity):
         super().__init__() 
 
         self.replan_time_limit = 60
+        self.enableflowcontrol = False
 
         with self.settrafarrays():
             self.last_replan = np.array([])
@@ -43,12 +46,21 @@ class FlowControl(core.Entity):
         super().create(n)
         self.last_replan[-n:] = bs.sim.simt
 
+    @stack.command 
+    def ENABLEFLOWCONTROL(self):
+        self.enableflowcontrol = True
+
+    def reset(self):
+        self.enableflowcontrol = False
 
 ######################## FLOW CONTROL FUNCTIONS #########################
 
 @core.timed_function(dt=10)
 def do_flowcontrol():
 
+    if not bs.traf.flowcontrol.enableflowcontrol:
+        return
+        
     # first apply some geovectors for aircraft
     apply_geovectors()
 
@@ -59,7 +71,6 @@ def do_flowcontrol():
     replan(acid_to_replan)
 
 def apply_geovectors():
-
     pass
 
 
@@ -100,16 +111,16 @@ def replan(acid_to_replan):
         # step 2 get activewaypoint
         active_waypoint = bs.traf.edgetraffic.edgeap.edge_rou[acidx].iactwp
 
-        # step 3, get the id two edges away as plan will start in that node and find index in current route
+        # step 3, start plan at the next edge
         # TODO: move this to streets autopilot update? or just use active_waypoint
         index_unique = np.argwhere(bs.traf.TrafficSpawner.unique_edges[acidx] == current_edgeid)[0][0]
-
+        
         # no replan if near end of route 
         # TODO: make it smarter
         if len(bs.traf.TrafficSpawner.unique_edges[acidx][index_unique:]) < 4:
             return
 
-        plan_edgeid = bs.traf.TrafficSpawner.unique_edges[acidx][index_unique+2]
+        plan_edgeid = bs.traf.TrafficSpawner.unique_edges[acidx][index_unique+1]
         index_start_plan = bs.traf.edgetraffic.edgeap.edge_rou[acidx].wpedgeid.index(plan_edgeid)
 
         # NOTE: the current plan should not change from current edgeid to first entry of plan_edgeid which is the index_next_final
@@ -120,8 +131,7 @@ def replan(acid_to_replan):
         start_lats  = np.array(bs.traf.ap.route[acidx].wplat[active_waypoint:index_start_plan])
         start_lons  = np.array(bs.traf.ap.route[acidx].wplon[active_waypoint:index_start_plan])
 
-        # Now add the current position to the start of start edges
-        start_edges = [start_edges[0]] + start_edges
+        # start_edges = [start_edges[0]] + start_edges
         start_turns = np.insert(start_turns, 0, bs.traf.edgetraffic.edgeap.edge_rou[acidx].turn[active_waypoint])
         start_lats = np.insert(start_lats, 0, bs.traf.lat[acidx])
         start_lons = np.insert(start_lons, 0, bs.traf.lon[acidx])
@@ -181,6 +191,14 @@ def replan(acid_to_replan):
         # update the last replan time
         bs.traf.flowcontrol.last_replan[acidx] = bs.sim.simt
 
+        # check if route has a self loop SANITY CHECK
+        route_edges = bs.traf.edgetraffic.edgeap.edge_rou[acidx].wpedgeid
+
+        unique_continuous_edges = [key for key, _group in groupby(route_edges)]
+        set_continuous_edges = set(unique_continuous_edges)
+        
+        if len(unique_continuous_edges) != len(set_continuous_edges):
+            print('ERROR NON continuous edges!')
 
 def plan_path(orig_node, dest_node) -> None:
     
