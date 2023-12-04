@@ -77,7 +77,7 @@ class Clustering(core.Entity):
         self.cluster_polygons = None
 
         # log cluster data
-        self.clusterlog = datalog.crelog('CLUSTERDENSITIES', None, clusterheader)
+        self.clusterlog = datalog.crelog('CLUSTERLOG', None, clusterheader)
 
         # edges to check for replanning
         self.cluster_edges = []
