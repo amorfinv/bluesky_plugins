@@ -240,10 +240,8 @@ class ActiveEdge(Entity):
         with self.settrafarrays():
             # TODO: choose correct dtypes for optimization
             self.wpedgeid = np.array([], dtype="S22")
-            self.nextwpedgeid = np.array([], dtype=str)
 
             self.turn = np.array([], dtype=bool)
-
 
             # cosntraint airspace information
             self.intersection_lat = np.array([])
@@ -263,7 +261,6 @@ class ActiveEdge(Entity):
         super().create(n)
 
         self.wpedgeid[-n:]                  = ""
-        self.nextwpedgeid[-n:]              = ""
 
         self.turn[-n:]                      = False
 
