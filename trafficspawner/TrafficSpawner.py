@@ -154,17 +154,6 @@ class TrafficSpawner(Entity):
         # force create spatial index
         edges_transformed.sindex
         
-        # bs.stack.stack(f'SCHEDULE 00:00:00 PAN {self.city_centre_coords[0]},{self.city_centre_coords[1]}')
-        # bs.stack.stack(f'SCHEDULE 00:00:00 ZOOM 15')
-        # bs.stack.stack(f'SCHEDULE 00:00:01 CDMETHOD INTENTCD')
-        # bs.stack.stack(f'SCHEDULE 00:00:01 RESO INTENTCR')
-        # bs.stack.stack(f'SCHEDULE 00:00:00 CDMETHOD DEFENSIVECD')
-        # bs.stack.stack(f'SCHEDULE 00:00:00 RESO DEFENSIVECR')
-        # bs.stack.stack(f'SCHEDULE 00:00:00 CDMETHOD m22CD')
-        # bs.stack.stack(f'SCHEDULE 00:00:00 RESO m22CR')
-        # bs.stack.stack(f'SCHEDULE 00:00:00 STARTLOGS')
-        # bs.stack.stack(f'SCHEDULE 00:00:00 STARTCDRLOGS')
-        # bs.stack.stack(f'HOLD')
         return G, edges_transformed, nodes_transformed
     
     @command
