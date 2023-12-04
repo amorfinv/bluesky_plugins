@@ -47,7 +47,7 @@ class CDRLogger(Entity):
     def startlogs(self):
         bs.traf.CDRLogger.flst.start()
         bs.traf.CDRLogger.conflog.start()
-        # bs.traf.CDRLogger.reglog.start()
+        bs.traf.CDRLogger.reglog.start()
         bs.traf.CDRLogger.loslog.start()
         return
     
