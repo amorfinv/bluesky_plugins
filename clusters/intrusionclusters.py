@@ -190,7 +190,7 @@ class Clustering(core.Entity):
         # anything below this cutoff is low density and above is medium density
         low_linear_density = self.scen_density_dict['0.25']
         # anything above this cutoff is high density
-        medium_linear_density = self.scen_density_dict['0.5']
+        medium_linear_density = self.scen_density_dict['0.50']
 
         # Categorize the density into three categories
         polygons['density_category'] = pd.cut(polygons['los_linear_density'],
