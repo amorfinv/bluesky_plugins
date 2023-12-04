@@ -67,9 +67,6 @@ class Clustering(core.Entity):
         # make observation time to look at past data
         self.observation_time = 10*60
 
-        # case for live traffic clustering
-        self.cluster_case = 'livetraffic'
-
         # minimum number of aircraft to be considered a cluster
         self.min_ntraf = 4
 
@@ -110,6 +107,19 @@ class Clustering(core.Entity):
     @timed_function(dt=10)
     def clustering(self):
 
+        # A check just in case
+        scenario_name = bs.stack.get_scenname().split('_')
+        traf_count = int(scenario_name[1][4:])
+        clust_dist_val = int(scenario_name[2][5:])
+
+        if self.distance_threshold != clust_dist_val:
+            print('ERROR WITH REIMPLEMENT!')
+            print('----------------------------')
+
+        if bs.traf.TrafficSpawner.target_ntraf != traf_count:
+            print('ERROR WITH REIMPLEMENT!')
+            print('----------------------------')
+        
         if bs.traf.ntraf < 2:
             return
 
