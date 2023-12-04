@@ -57,8 +57,8 @@ class M2CD(ConflictDetection):
         self.rpz_buffered = 40 #m
         
         # Logging
-        self.conflictlog = datalog.crelog('CDR_CONFLICTLOG', None, confheader)
-        self.uniqueconfloslog = datalog.crelog('CDR_WASLOSLOG', None, uniqueconflosheader)
+        self.conflictlog = datalog.crelog('CDRCONFLICTLOG', None, confheader)
+        self.uniqueconfloslog = datalog.crelog('CDRWASLOSLOG', None, uniqueconflosheader)
 
         # cluster information
         self.conf_cluster = []
