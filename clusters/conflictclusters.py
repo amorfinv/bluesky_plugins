@@ -370,7 +370,7 @@ class Clustering(core.Entity):
         self.clusterlog.log(*area_densities)
 
     @command 
-    def STARTLOG(self):
+    def STARTCLUSTERLOG(self):
         self.clusterlog.start()
     
     @command 

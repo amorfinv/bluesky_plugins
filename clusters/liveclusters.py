@@ -344,7 +344,7 @@ class Clustering(core.Entity):
         pass
 
     @command 
-    def STARTLOG(self):
+    def STARTCLUSTERLOG(self):
         self.clusterlog.start()
     
     @command 
