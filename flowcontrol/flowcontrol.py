@@ -49,6 +49,10 @@ class FlowControl(core.Entity):
     @stack.command 
     def ENABLEFLOWCONTROL(self):
         self.enableflowcontrol = True
+    
+    @stack.command 
+    def REPLANLIMIT(self, replanlimit:int):
+        self.replanlimit = replanlimit
 
     def reset(self):
         self.enableflowcontrol = False
