@@ -7,6 +7,7 @@ from scipy.spatial import KDTree
 import networkx as nx
 import osmnx as ox
 from itertools import groupby
+from copy import copy
 
 import bluesky as bs
 from bluesky import core, stack, traf, scr, sim
@@ -127,6 +128,9 @@ def replan(acid_to_replan):
         plan_edgeid = bs.traf.TrafficSpawner.unique_edges[acidx][index_unique+1]
         index_start_plan = bs.traf.edgetraffic.edgeap.edge_rou[acidx].wpedgeid.index(plan_edgeid)
 
+        # also save old plan to see if it has changed
+        old_edgeids = copy(bs.traf.edgetraffic.edgeap.edge_rou[acidx].wpedgeid)[active_waypoint:]
+        
         # NOTE: the current plan should not change from current edgeid to first entry of plan_edgeid which is the index_next_final
         
         # step 5: gather the data that will stay the same in the plan
@@ -135,7 +139,8 @@ def replan(acid_to_replan):
         start_lats  = np.array(bs.traf.ap.route[acidx].wplat[active_waypoint:index_start_plan])
         start_lons  = np.array(bs.traf.ap.route[acidx].wplon[active_waypoint:index_start_plan])
 
-        # start_edges = [start_edges[0]] + start_edges
+        # add the current position of the aircraft to the front
+        start_edges = [copy(start_edges[0])] + copy(start_edges)
         start_turns = np.insert(start_turns, 0, bs.traf.edgetraffic.edgeap.edge_rou[acidx].turn[active_waypoint])
         start_lats = np.insert(start_lats, 0, bs.traf.lat[acidx])
         start_lons = np.insert(start_lons, 0, bs.traf.lon[acidx])
@@ -162,6 +167,14 @@ def replan(acid_to_replan):
         lats = np.concatenate((start_lats, lats))
         lons = np.concatenate((start_lons, lons))
         turns = np.concatenate((start_turns, turns))
+
+        # here check if plan has changed, check from second entry in new edges 
+        # because the first entry is the current aircraft position
+        new_edgeids = copy(edges[1:])
+        if old_edgeids == new_edgeids:
+            # if entering here then we have the same plan
+            # do not replan
+            continue
 
         bs.traf.TrafficSpawner.route_edges[acidx] = edges
         unique_edges = list({edge: None for edge in edges}.keys())
