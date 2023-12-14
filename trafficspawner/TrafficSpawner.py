@@ -67,6 +67,8 @@ class TrafficSpawner(Entity):
             self.distance3D = np.array([])
             self.distancealt = np.array([])
             self.create_time = np.array([])
+            self.can_replan = np.array([])
+
         return
     
     def create(self, n=1):
@@ -78,6 +80,9 @@ class TrafficSpawner(Entity):
         self.distance3D[-n:] = [0]*n
         self.distancealt[-n:] = [0]*n
         self.create_time[-n:] = [0]*n
+        self.can_replan[-n:] = [random.choice([True, False])]*n
+        # self.can_replan[-n:] = [random.choice([True, False, False])]*n
+
     
     def reset(self):
         self.target_ntraf = 100
@@ -114,7 +119,8 @@ class TrafficSpawner(Entity):
             self.distance3D = np.array([])
             self.distancealt = np.array([])
             self.create_time = np.array([])
-    
+            self.can_replan = np.array([])
+
     @command
     def loadcity(self, city = None):
         # Get a list of available cities
