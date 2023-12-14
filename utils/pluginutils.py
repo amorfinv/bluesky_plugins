@@ -93,7 +93,7 @@ def get_turn_arrays(lats, lons, cutoff_angle=25):
 
     # Define empty arrays that are same size as lat and lon
     turn_speed = np.zeros(len(lats))
-    turn_bool = np.array([False] * len(lats), dtype=np.bool8)
+    turn_bool = np.array([False] * len(lats), dtype=np.bool_)
     turn_coords = np.array([(-9999.9, -9999.9)] * len(lats), dtype="f,f")
 
     # Initialize variables for the loop
@@ -109,11 +109,11 @@ def get_turn_arrays(lats, lons, cutoff_angle=25):
         lon_next = lons[i + 1]
 
         # calculate angle between points
-        _, d1 = geo.qdrdist(lat_prev, lon_prev, lat_cur, lon_cur)
-        _, d2 = geo.qdrdist(lat_cur, lon_cur, lat_next, lon_next)
+        a1, _ = geo.qdrdist(lat_prev, lon_prev, lat_cur, lon_cur)
+        a2, _ = geo.qdrdist(lat_cur, lon_cur, lat_next, lon_next)
 
         # fix angles that are larger than 180 degrees
-        angle = abs(d2 - d1)
+        angle = abs(a1 - a2)
         angle = 360 - angle if angle > 180 else angle
 
         # give the turn speeds based on the angle
@@ -124,12 +124,8 @@ def get_turn_arrays(lats, lons, cutoff_angle=25):
             turn_coords[i] = (lat_cur, lon_cur)
 
             # calculate the turn speed based on the angle.
-            if angle < 100:
-                turn_speed[i] = 10
-            elif angle < 150:
-                turn_speed[i] = 5
-            else:
-                turn_speed[i] = 2
+            turn_speed[i] = 5
+
         else:
             turn_coords[i] = (-9999.9, -9999.9)
 
