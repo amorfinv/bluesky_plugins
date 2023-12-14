@@ -73,7 +73,7 @@ class FlowControl(core.Entity):
         self.replanlimit = replanlimit
 
     @stack.command
-    def REPLANRATIO(self, replanratio:int):
+    def REPLANRATIO(self, replanratio:float):
         # this sets the ratio of aircraft that can replan
         # number between 0 and 1.
         self.replan_ratio = replanratio
