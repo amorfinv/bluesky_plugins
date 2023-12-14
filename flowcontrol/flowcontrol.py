@@ -12,12 +12,27 @@ from copy import copy
 import bluesky as bs
 from bluesky import core, stack, traf, scr, sim
 from bluesky.tools.aero import ft, kts, nm
+from bluesky.tools import datalog
 from bluesky.tools import geo
 from bluesky.core import Entity, Replaceable
 from bluesky.traffic import Route
 from bluesky.tools.misc import degto180, txt2tim, txt2alt, txt2spd, lat2txt
 
 from plugins.utils import pluginutils
+
+
+flowheader = \
+    '#######################################################\n' + \
+    'Cluster log LOG\n' + \
+    'Cluster density statistics\n' + \
+    '#######################################################\n\n' + \
+    'Parameters [Units]:\n' + \
+    'Simulation time [s], ' + \
+    'Number of aircraft in air [-], ' + \
+    'Number of attempted replans[-], ' + \
+    'Number of successful replans[-], ' + \
+    'Succesful replans/attempted replans * 100[%], ' + \
+    'Succesful replans / Number of aircraft in air * 100 [%]\n'
 
 # # create classes
 flowcontrol = None
@@ -39,6 +54,7 @@ class FlowControl(core.Entity):
 
         self.replan_time_limit = 60
         self.enableflowcontrol = False
+        self.flowlog = datalog.crelog('FLOWLOG', None, flowheader)
 
         with self.settrafarrays():
             self.last_replan = np.array([])
@@ -54,6 +70,10 @@ class FlowControl(core.Entity):
     @stack.command 
     def REPLANLIMIT(self, replanlimit:int):
         self.replanlimit = replanlimit
+
+    @stack.command 
+    def STARTFLOWLOG(self):
+        self.flowlog.start()
 
     def reset(self):
         self.enableflowcontrol = False
@@ -73,7 +93,10 @@ def do_flowcontrol():
     acid_to_replan = aircraft_to_replan()
 
     # replan the planns
-    replan(acid_to_replan)
+    attempted_replans, succesful_replans = replan(acid_to_replan)
+
+    # update logging
+    update_logging(attempted_replans, succesful_replans)
 
 def apply_geovectors():
     pass
@@ -88,6 +111,9 @@ def aircraft_to_replan():
     acid_to_replan = []
 
     for acidx, acid in enumerate(bs.traf.id):
+
+        if not bs.traf.TrafficSpawner.can_replan[acidx]:
+            continue
 
         # First check that the current aircraft has not done a replan 
         # within the self.replan time limit
@@ -108,6 +134,10 @@ def aircraft_to_replan():
 def replan(acid_to_replan):
     # start replanning
 
+    # track total replans
+    attempted_replans = len(acid_to_replan)
+    succesful_replans = 0
+
     for acid, acidx in acid_to_replan:
 
         # step 1 get current edge of travel
@@ -123,7 +153,7 @@ def replan(acid_to_replan):
         # no replan if near end of route 
         # TODO: make it smarter
         if len(bs.traf.TrafficSpawner.unique_edges[acidx][index_unique:]) < 4:
-            return
+            continue
 
         plan_edgeid = bs.traf.TrafficSpawner.unique_edges[acidx][index_unique+1]
         index_start_plan = bs.traf.edgetraffic.edgeap.edge_rou[acidx].wpedgeid.index(plan_edgeid)
@@ -144,12 +174,6 @@ def replan(acid_to_replan):
         start_turns = np.insert(start_turns, 0, bs.traf.edgetraffic.edgeap.edge_rou[acidx].turn[active_waypoint])
         start_lats = np.insert(start_lats, 0, bs.traf.lat[acidx])
         start_lons = np.insert(start_lons, 0, bs.traf.lon[acidx])
-
-        # step 6: now able to delete current route
-        # If the next waypoint is a turn waypoint, then remember the turnrad
-        nextqdr_to_remember = bs.traf.actwp.next_qdr[acidx]
-        acrte = Route._routes.get(acid)
-        bs.traf.edgetraffic.edgeap.update_route(acid, acidx)
 
         # step 7: select node to start plan from and final node
         node_start_plan = plan_edgeid.split('-')[0]
@@ -175,6 +199,15 @@ def replan(acid_to_replan):
             # if entering here then we have the same plan
             # do not replan
             continue
+
+        # increment succesful replans
+        succesful_replans += 1
+
+        # now able to delete current route
+        # If the next waypoint is a turn waypoint, then remember the turnrad
+        nextqdr_to_remember = bs.traf.actwp.next_qdr[acidx]
+        acrte = Route._routes.get(acid)
+        bs.traf.edgetraffic.edgeap.update_route(acid, acidx)
 
         bs.traf.TrafficSpawner.route_edges[acidx] = edges
         unique_edges = list({edge: None for edge in edges}.keys())
@@ -216,6 +249,22 @@ def replan(acid_to_replan):
         
         if len(unique_continuous_edges) != len(set_continuous_edges):
             print('ERROR NON continuous edges!')
+
+    # print(attempted_replans, succesful_replans)
+    return attempted_replans, succesful_replans
+
+def update_logging(attempted_replans, succesful_replans):
+
+    if attempted_replans == 0:
+        return
+
+    bs.traf.flowcontrol.flowlog.log(
+        bs.traf.ntraf,
+        attempted_replans,
+        succesful_replans,
+        (succesful_replans/attempted_replans) * 100,
+        (succesful_replans/bs.traf.ntraf) * 100
+    )
 
 def plan_path(orig_node, dest_node) -> None:
     
