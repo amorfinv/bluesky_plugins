@@ -27,8 +27,6 @@ flowheader = \
     'Succesful replans/attempted replans * 100[%], ' + \
     'Succesful replans / Number of aircraft in air * 100 [%]\n'
 
-# # create classes
-flowcontrol = None
 
 def init_plugin():
 
@@ -41,6 +39,7 @@ def init_plugin():
         }
     
     return config
+
 class FlowControl(core.Entity):
     def __init__(self):
         super().__init__() 
@@ -51,8 +50,7 @@ class FlowControl(core.Entity):
         
         # default replan ratio
         self.replan_ratio = 0.5
-        self.replan_selection = [True] * (100 * self.replan_ratio) + [False] * (100 - 100 * self.replan_ratio)
-        self.replan_selection = random.shuffle(self.replan_selection)
+        self.replan_probabilities = [self.replan_ratio, 1-self.replan_ratio]
 
 
         with self.settrafarrays():
@@ -63,7 +61,7 @@ class FlowControl(core.Entity):
     def create(self, n=1):
         super().create(n)
         self.last_replan[-n:] = bs.sim.simt
-        self.can_replan[-n:] = random.choice(self.replan_selection)
+        self.can_replan[-n:] = random.choices([True, False], self.replan_probabilities)
 
 
     @stack.command 
@@ -79,9 +77,7 @@ class FlowControl(core.Entity):
         # this sets the ratio of aircraft that can replan
         # number between 0 and 1.
         self.replan_ratio = replanratio
-        self.replan_selection = [True] * (100 * self.replan_ratio) + [False] * (100 - 100 * self.replan_ratio)
-        self.replan_selection = random.shuffle(self.replan_selection)
-
+        self.replan_probabilities = [self.replan_ratio, 1-self.replan_ratio]
 
     @stack.command 
     def STARTFLOWLOG(self):
@@ -124,9 +120,9 @@ def aircraft_to_replan():
 
     for acidx, acid in enumerate(bs.traf.id):
 
-        if not bs.traf.TrafficSpawner.can_replan[acidx]:
+        if not bs.traf.flowcontrol.can_replan[acidx]:
             continue
-
+        
         # First check that the current aircraft has not done a replan 
         # within the self.replan time limit
         replan_time = bs.sim.simt - bs.traf.flowcontrol.last_replan[acidx]
@@ -287,10 +283,10 @@ def plan_path(orig_node, dest_node) -> None:
     lats, lons, edges, _ = pluginutils.lat_lon_from_nx_route(bs.traf.TrafficSpawner.graph, node_route)
 
     # TODO: standardise with picklemaker
-    turn_bool, turn_speed, turn_coords = pluginutils.get_turn_arrays(lats, lons)
+    turn_bool, _, _ = pluginutils.get_turn_arrays(lats, lons)
 
     # get initial bearing
-    qdr, _ = geo.qdrdist(lats[0], lons[0], lats[1], lons[1])
+    _, _ = geo.qdrdist(lats[0], lons[0], lats[1], lons[1])
     
     return lats, lons, edges, turn_bool
 
