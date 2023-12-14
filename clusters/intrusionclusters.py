@@ -139,6 +139,7 @@ class Clustering(core.Entity):
         if len(bs.traf.cd.los_cluster) == 0:
             return
 
+        # TODO: something happening here with reproducibility
         lat_lon_los = np.vstack(list(bs.traf.cd.los_cluster.values()))
         x,y = self.transformer_to_utm.transform(lat_lon_los[:,0],lat_lon_los[:,1])
         features = np.column_stack((x, y))
