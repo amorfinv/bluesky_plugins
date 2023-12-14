@@ -1,22 +1,15 @@
-import json
 import numpy as np
-from collections import Counter
-import pandas as pd
-from scipy.sparse import csr_matrix
-from scipy.spatial import KDTree
 import networkx as nx
-import osmnx as ox
 from itertools import groupby
 from copy import copy
+import random
 
 import bluesky as bs
-from bluesky import core, stack, traf, scr, sim
-from bluesky.tools.aero import ft, kts, nm
+from bluesky import core, stack
+from bluesky.tools.aero import kts
 from bluesky.tools import datalog
 from bluesky.tools import geo
-from bluesky.core import Entity, Replaceable
 from bluesky.traffic import Route
-from bluesky.tools.misc import degto180, txt2tim, txt2alt, txt2spd, lat2txt
 
 from plugins.utils import pluginutils
 
@@ -55,13 +48,23 @@ class FlowControl(core.Entity):
         self.replan_time_limit = 60
         self.enableflowcontrol = False
         self.flowlog = datalog.crelog('FLOWLOG', None, flowheader)
+        
+        # default replan ratio
+        self.replan_ratio = 0.5
+        self.replan_selection = [True] * (100 * self.replan_ratio) + [False] * (100 - 100 * self.replan_ratio)
+        self.replan_selection = random.shuffle(self.replan_selection)
+
 
         with self.settrafarrays():
             self.last_replan = np.array([])
+            self.can_replan = np.array([])
+
   
     def create(self, n=1):
         super().create(n)
         self.last_replan[-n:] = bs.sim.simt
+        self.can_replan[-n:] = random.choice(self.replan_selection)
+
 
     @stack.command 
     def ENABLEFLOWCONTROL(self):
@@ -70,6 +73,15 @@ class FlowControl(core.Entity):
     @stack.command 
     def REPLANLIMIT(self, replanlimit:int):
         self.replanlimit = replanlimit
+
+    @stack.command
+    def REPLANRATIO(self, replanratio:int):
+        # this sets the ratio of aircraft that can replan
+        # number between 0 and 1.
+        self.replan_ratio = replanratio
+        self.replan_selection = [True] * (100 * self.replan_ratio) + [False] * (100 - 100 * self.replan_ratio)
+        self.replan_selection = random.shuffle(self.replan_selection)
+
 
     @stack.command 
     def STARTFLOWLOG(self):
