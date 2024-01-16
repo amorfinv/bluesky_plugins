@@ -94,7 +94,6 @@ class FlowControl(core.Entity):
 @core.timed_function(dt=10)
 def do_flowcontrol():
 
-    print('flowcontrol')
     if not bs.traf.flowcontrol.enableflowcontrol:
         return
         
@@ -266,7 +265,6 @@ def replan(acid_to_replan):
         if len(unique_continuous_edges) != len(set_continuous_edges):
             print('ERROR NON continuous edges!')
 
-    print(attempted_replans, succesful_replans)
     return attempted_replans, succesful_replans
 
 def update_logging(attempted_replans, succesful_replans):

@@ -57,8 +57,6 @@ class Clustering(core.Entity):
     @timed_function(dt=10)
     def clustering(self):
 
-        print('clustering')
-
         if bs.traf.ntraf == 0:
             return
         
