@@ -403,7 +403,7 @@ class Clustering(core.Entity):
     def SETOBSERVATIONTIME(self, time:int):
         self.observation_time = time
     
-     @command 
+    @command 
     def SETGRAPHWEIGHTS(self,low_density_weight:float, medium_density_weight:float, high_density_weight:float):
         # set the weights of the graph
         self.low_density_weight = low_density_weight
