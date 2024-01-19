@@ -76,6 +76,10 @@ class Clustering(core.Entity):
         # edges to check for replanning
         self.cluster_edges = []
 
+        # set the weights of the graph
+        self.medium_density_weight = 1.5
+        self.high_density_weight = 2
+        
         # load the density dictionary
         with open(f'{bs.settings.plugin_path}/clusters/densityjsons/intrusiontraffic.json', 'r') as file:
             # Load the JSON data into a dictionary
@@ -215,10 +219,9 @@ class Clustering(core.Entity):
         merged_df = pd.merge(polygons, edges_df, left_index=True, right_on='flow_group', how='left')
 
         # Apply conditions based on 'density_category'
-        merged_df['adjusted_length'] = merged_df.apply(lambda row: row['length'] * 1.5 if row['density_category'] == 'medium' 
-                                                                        else (row['length'] * 2 if row['density_category'] == 'high' 
+        merged_df['adjusted_length'] = merged_df.apply(lambda row: row['length'] * self.medium_density_weight if row['density_category'] == 'medium' 
+                                                                        else (row['length'] * self.high_density_weight if row['density_category'] == 'high' 
                                                                                 else (row['length'])), axis=1)
-        
         # update the TrafficSpawner graph
         # # Update edge attributes in the graph
         edge_lengths = {row.Index: row.adjusted_length for row in merged_df.itertuples()}
@@ -398,3 +401,9 @@ class Clustering(core.Entity):
     @command 
     def SETOBSERVATIONTIME(self, time:int):
         self.observation_time = time
+     
+    @command 
+    def SETGRAPHWEIGHTS(self, medium_density_weight:float, high_density_weight:float):
+        # set the weights of the graph
+        self.medium_density_weight = medium_density_weight
+        self.high_density_weight = high_density_weight
