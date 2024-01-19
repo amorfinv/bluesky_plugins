@@ -77,6 +77,7 @@ class Clustering(core.Entity):
         self.cluster_edges = []
 
         # set the weights of the graph
+        self.low_density_weight = 1
         self.medium_density_weight = 1.5
         self.high_density_weight = 2
 
@@ -221,7 +222,7 @@ class Clustering(core.Entity):
         # Apply conditions based on 'density_category'
         merged_df['adjusted_length'] = merged_df.apply(lambda row: row['length'] * self.medium_density_weight if row['density_category'] == 'medium' 
                                                                         else (row['length'] * self.high_density_weight if row['density_category'] == 'high' 
-                                                                                else (row['length'])), axis=1)
+                                                                                else (row['length'] * self.low_density_weight)), axis=1)
         # update the TrafficSpawner graph
         # # Update edge attributes in the graph
         edge_lengths = {row.Index: row.adjusted_length for row in merged_df.itertuples()}
@@ -403,7 +404,9 @@ class Clustering(core.Entity):
         self.observation_time = time
     
      @command 
-    def SETGRAPHWEIGHTS(self, medium_density_weight:float, high_density_weight:float):
+    def SETGRAPHWEIGHTS(self,low_density_weight:float, medium_density_weight:float, high_density_weight:float):
         # set the weights of the graph
+        self.low_density_weight = low_density_weight
         self.medium_density_weight = medium_density_weight
         self.high_density_weight = high_density_weight
+

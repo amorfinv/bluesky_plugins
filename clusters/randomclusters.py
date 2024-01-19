@@ -46,6 +46,11 @@ def init_plugin():
         'plugin_type':     'sim'
     }
 
+    # get the density weights
+    self.low_density_weight = 1
+    self.medium_density_weight = 1.5
+    self.high_density_weight = 2 
+
     return config
 
 class Clustering(core.Entity):
@@ -63,7 +68,7 @@ class Clustering(core.Entity):
         edges_df = bs.traf.TrafficSpawner.edges
 
         # Here we only randomly apply weights to the graph for replanning
-        potential_new_weights = [1, 1.5 , 2]
+        potential_new_weights = [self.low_density_weight, self.medium_density_weight, self.high_density_weight]
         probabilities = [0.5, 0.25, 0.25]
 
         random_values = np.random.choice(potential_new_weights, size=len(edges_df), p=probabilities)
@@ -79,5 +84,9 @@ class Clustering(core.Entity):
             bs.traf.TrafficSpawner.graph[edge_label[0]][edge_label[1]][edge_label[2]]['length'] = adjusted_length 
 
 
-
-
+    @command 
+    def SETGRAPHWEIGHTS(self,low_density_weight:float, medium_density_weight:float, high_density_weight:float):
+        # set the weights of the graph
+        self.low_density_weight = low_density_weight
+        self.medium_density_weight = medium_density_weight
+        self.high_density_weight = high_density_weight
