@@ -185,7 +185,6 @@ class Clustering(core.Entity):
         polygons['density_category'] = pd.cut(polygons['ac_linear_density'],
                                             bins=[float('-inf'), low_linear_density, medium_linear_density, float('inf')],
                                             labels=['low', 'medium', 'high'])
-        
 
         # add these categories to the edges_df        
         merged_df = pd.merge(polygons, edges_df, left_index=True, right_on='flow_group', how='left')
@@ -230,7 +229,7 @@ class Clustering(core.Entity):
         polygons['ac_count'] = polygons.index.map(flow_count_dict)
 
         # calculate the linear density
-        polygons['ac_linear_density'] = polygons['ac_count'] / polygons['edge_length'] * 10000
+        polygons['ac_linear_density'] = polygons['ac_count'] / polygons['edge_length'] * 1000
 
         # calculate the area density
         polygons['ac_area_density'] = polygons['ac_count'] / polygons['geometry'].area * 1000000
