@@ -4,7 +4,7 @@ import pandas as pd
 import osmnx as ox
 import json
 
-G = ox.load_graphml('/Users/andresmorfin/skyblue/am/bluesky/plugins/scenario_maker/Rotterdam/gen_directed.graphml')
+G = ox.load_graphml('scenario_maker/Rotterdam/updated.graphml')
 
 nodes, edges = ox.graph_to_gdfs(G)
 
@@ -25,10 +25,10 @@ nodes['result'] = nodes.apply(lambda row: [row['y'], row['x']], axis=1)
 result_dict = nodes['result'].to_dict()
 
 # Write the dictionary to a JSON file
-with open('/Users/andresmorfin/skyblue/am/bluesky/plugins/scenario_maker/Rotterdam/nodes.json', 'w') as json_file:
+with open('scenario_maker/Rotterdam/nodes.json', 'w') as json_file:
     json.dump(result_dict, json_file, indent=4)
 
 # Write the dictionary to a JSON file
-with open('/Users/andresmorfin/skyblue/am/bluesky/plugins/scenario_maker/Rotterdam/edges.json', 'w') as json_file:
+with open('scenario_maker/Rotterdam/edges.json', 'w') as json_file:
     json.dump(edges_dict, json_file, indent=4)
 # %%

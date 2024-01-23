@@ -415,7 +415,7 @@ class PathPlans(Entity):
             self.pathplanning = []
 
         # read in graph with networkx from graphml
-        self.graph = ox.load_graphml(f'{graph_dir}gen_directed.graphml')
+        self.graph = ox.load_graphml(f'{graph_dir}updated.graphml')
         self.node_gdf, self.edge_gdf = ox.graph_to_gdfs(self.graph)
         
         # get a projected dataframe of the graph

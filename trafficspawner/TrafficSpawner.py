@@ -132,8 +132,8 @@ class TrafficSpawner(Entity):
         self.city_centre_coords = [float(coords[0]), float(coords[1])]
         # Load the graph for the city
         # read gpkgs that are
-        nodes = gpd.read_file(f'{self.path}/gen_directed.gpkg', layer='nodes')
-        edges = gpd.read_file(f'{self.path}/gen_directed.gpkg', layer='edges')
+        nodes = gpd.read_file(f'{self.path}/updated.gpkg', layer='nodes')
+        edges = gpd.read_file(f'{self.path}/updated.gpkg', layer='edges')
 
         # set the indices 
         edges.set_index(['u', 'v', 'key'], inplace=True)

@@ -37,8 +37,8 @@ path = f'{city}'
 min_dist = 1000 # Metres
 
 # Load the graph for that city
-nodes = gpd.read_file(city + '/gen_directed.gpkg', layer='nodes')
-edges = gpd.read_file(city + '/gen_directed.gpkg', layer='edges')
+nodes = gpd.read_file(city + '/updated.gpkg', layer='nodes')
+edges = gpd.read_file(city + '/updated.gpkg', layer='edges')
 
 # make sure length is correct
 nodes.set_index(['osmid'], inplace=True)
