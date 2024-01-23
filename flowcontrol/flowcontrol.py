@@ -1,8 +1,10 @@
 import numpy as np
 import networkx as nx
+import osmnx as ox
 from itertools import groupby
 from copy import copy
 import random
+from collections import OrderedDict
 
 import bluesky as bs
 from bluesky import core, stack
@@ -192,7 +194,7 @@ def replan(acid_to_replan):
         # TODO: check if plan actually changed
         # TODO: standardize edges as tuple
         # TODO: replan only affected area? 
-        lats, lons, edges, turns = plan_path(int(node_start_plan),int(node_end_plan))
+        lats, lons, edges, turns, node_route = plan_path(int(node_start_plan),int(node_end_plan))
 
         # step 9: merge the starting routes with the new ones
         edges = start_edges + edges
@@ -258,8 +260,61 @@ def replan(acid_to_replan):
         if len(unique_continuous_edges) != len(set_continuous_edges):
             print('ERROR NON continuous edges!')
 
+        # TODO: FINAL step is to gather information about the new plan and compare
+        # evaluate_new_route(old_edgeids, new_edgeids, node_route)
+
     # print(attempted_replans, succesful_replans)
     return attempted_replans, succesful_replans
+
+def evaluate_new_route(old_edgeids, new_edgeids, node_route):
+    
+    # get nodes of old plan
+    old_plan = [int(edge.split('-')[1]) for edge in old_edgeids]
+    new_plan = [int(edge.split('-')[1]) for edge in new_edgeids]
+
+    # Use OrderedDict to maintain the order of unique elements
+    old_plan = list(OrderedDict.fromkeys(old_plan).keys())
+    new_plan = list(OrderedDict.fromkeys(new_plan).keys())
+
+    # sanity check
+    # TODO: ensure new plan is being made correctely
+    if new_plan != node_route:
+        print('something is amiss!')
+        raise Exception
+    
+    # get length of current plan
+    length_new = get_route_length(new_plan)
+
+    # get true shortest path
+    # print('True shortest route length:')
+    true_shortest_path = nx.shortest_path(bs.traf.TrafficSpawner.original_graph, node_route[0], node_route[-1], weight='length', method='dijkstra')
+
+    # get length of true shortest route
+    length_true = get_route_length(true_shortest_path)
+
+    # now get a bunch of shortest paths with the real lengths
+    many_plans = ox.k_shortest_paths(bs.traf.TrafficSpawner.graph, node_route[0], node_route[-1], 20, weight='length')
+
+    # get length of first route
+    lengths_plans = []
+    idx_new_plan = None
+    for idx, plan in enumerate(many_plans):
+        length = get_route_length(plan)
+        lengths_plans.append(length)
+
+        if plan == new_plan:
+            idx_new_plan = idx
+    
+
+def get_route_length(node_list):
+
+    # get the true route length and not adjusted one
+    edges_route = [(node_list[i], node_list[i+1],0) for i in range(len(node_list)-1)]
+    length = bs.traf.TrafficSpawner.edges.loc[edges_route].length.sum()
+
+    return length
+
+
 
 def update_logging(attempted_replans, succesful_replans):
 
@@ -277,7 +332,7 @@ def update_logging(attempted_replans, succesful_replans):
 def plan_path(orig_node, dest_node) -> None:
     
     # todo: CREM2 with nearest nodes
-    node_route = nx.shortest_path(bs.traf.TrafficSpawner.graph, orig_node, dest_node, weight='adjusted_length', method='dijkstra')
+    node_route = nx.shortest_path(bs.traf.TrafficSpawner.graph, orig_node, dest_node, weight='length', method='dijkstra')
 
     # get lat and lon from route and turninfo
     lats, lons, edges, _ = pluginutils.lat_lon_from_nx_route(bs.traf.TrafficSpawner.graph, node_route)
@@ -288,5 +343,5 @@ def plan_path(orig_node, dest_node) -> None:
     # get initial bearing
     _, _ = geo.qdrdist(lats[0], lons[0], lats[1], lons[1])
     
-    return lats, lons, edges, turn_bool
+    return lats, lons, edges, turn_bool, node_route
 

@@ -4,6 +4,7 @@ import osmnx as ox
 import os
 import pickle
 import random
+from copy import deepcopy
 
 import bluesky as bs
 from bluesky.core import Entity, timed_function
@@ -35,7 +36,7 @@ class TrafficSpawner(Entity):
         super().__init__()
         self.target_ntraf = 100
         # Load default city
-        self.graph, self.edges, self.nodes = self.loadcity('Rotterdam')
+        self.graph, self.original_graph, self.edges, self.nodes = self.loadcity('Rotterdam')
         # Traffic ID increment
         self.traf_id = 1
         #default alt and speed
@@ -62,12 +63,13 @@ class TrafficSpawner(Entity):
         with self.settrafarrays():
             self.route_edges = []
             self.unique_edges = []
+            self.original_route = []
+
             # Metrics
             self.distance2D = np.array([])
             self.distance3D = np.array([])
             self.distancealt = np.array([])
             self.create_time = np.array([])
-
         return
     
     def create(self, n=1):
@@ -75,6 +77,7 @@ class TrafficSpawner(Entity):
         # Store creation time of new aircraft
         self.route_edges[-n:] = [0]*n # Default edge
         self.unique_edges[-n:] = [0]*n # Default edge
+        self.original_route[-n:] = [0]*n
         self.distance2D[-n:] = [0]*n
         self.distance3D[-n:] = [0]*n
         self.distancealt[-n:] = [0]*n
@@ -83,7 +86,7 @@ class TrafficSpawner(Entity):
     def reset(self):
         self.target_ntraf = 100
         # Load default city
-        self.graph, self.edges, self.nodes = self.loadcity('Rotterdam')
+        self.graph, self.original_graph, self.edges, self.nodes = self.loadcity('Rotterdam')
         # Traffic ID increment
         self.traf_id = 1
         #default alt and speed
@@ -110,11 +113,14 @@ class TrafficSpawner(Entity):
         with self.settrafarrays():
             self.route_edges = []
             self.unique_edges = []
+            self.original_route = []
+
             # Metrics
             self.distance2D = np.array([])
             self.distance3D = np.array([])
             self.distancealt = np.array([])
             self.create_time = np.array([])
+
 
     @command
     def loadcity(self, city = None):
@@ -144,6 +150,7 @@ class TrafficSpawner(Entity):
         nodes['y'] = nodes['geometry'].apply(lambda x: x.y)
 
         G = ox.graph_from_gdfs(nodes, edges)
+        G_original = ox.graph_from_gdfs(nodes, edges)
 
         # convert both to CRS:28992
         edges_transformed = edges.to_crs('EPSG:28992')
@@ -155,7 +162,7 @@ class TrafficSpawner(Entity):
         # force create spatial index
         edges_transformed.sindex
         
-        return G, edges_transformed, nodes_transformed
+        return G, G_original, edges_transformed, nodes_transformed
     
     @command
     def trafficnumber(self, target_ntraf = 50):
@@ -235,6 +242,7 @@ class TrafficSpawner(Entity):
             # TODO: maybe use stroke groups
             unique_edges = list({f'{u}-{v}':None for u,v in edges}.keys())
             self.unique_edges[acidx] = np.array(unique_edges)
+            self.original_route[acidx] = deepcopy(unique_edges)
 
 
             # Start adding waypoints

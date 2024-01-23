@@ -283,7 +283,7 @@ def update_logging(attempted_replans, succesful_replans):
 def plan_path(orig_node, dest_node) -> None:
     
     # todo: CREM2 with nearest nodes
-    node_route = nx.shortest_path(bs.traf.TrafficSpawner.graph, orig_node, dest_node, weight='adjusted_length', method='dijkstra')
+    node_route = nx.shortest_path(bs.traf.TrafficSpawner.graph, orig_node, dest_node, weight='length', method='dijkstra')
 
     # get lat and lon from route and turninfo
     lats, lons, edges, _ = pluginutils.lat_lon_from_nx_route(bs.traf.TrafficSpawner.graph, node_route)

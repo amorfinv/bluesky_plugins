@@ -46,18 +46,16 @@ def init_plugin():
         'plugin_type':     'sim'
     }
 
-    # get the density weights
-    self.low_density_weight = 1
-    self.medium_density_weight = 1.5
-    self.high_density_weight = 2 
-
     return config
 
 class Clustering(core.Entity):
     def __init__(self):
         super().__init__() 
 
-
+        # set the density weights
+        self.low_density_weight = 1.0
+        self.medium_density_weight = 1.5
+        self.high_density_weight = 2.0
 
     @timed_function(dt=10)
     def clustering(self):
@@ -78,9 +76,9 @@ class Clustering(core.Entity):
 
         # update the TrafficSpawner graph
         # # Update edge attributes in the graph
-        edge_lengths = {row.Index: row.adjusted_length for row in edges_df.itertuples()}
+        cluster_edge_lengths = {row.Index: row.adjusted_length for row in edges_df.itertuples()}
 
-        for edge_label, adjusted_length in edge_lengths.items():
+        for edge_label, adjusted_length in cluster_edge_lengths.items():
             bs.traf.TrafficSpawner.graph[edge_label[0]][edge_label[1]][edge_label[2]]['length'] = adjusted_length 
 
 

@@ -129,3 +129,4 @@ dmypy.json
 .pyre/
 
 scenario_maker/Rotterdam/pickles
+scenario_maker/Rotterdam_old/pickles

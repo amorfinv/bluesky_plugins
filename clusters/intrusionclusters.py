@@ -77,9 +77,9 @@ class Clustering(core.Entity):
         self.cluster_edges = []
 
         # set the weights of the graph
-        self.low_density_weight = 1.5
+        self.low_density_weight = 1.0
         self.medium_density_weight = 1.5
-        self.high_density_weight = 2
+        self.high_density_weight = 2.0
         
         # load the density dictionary
         with open(f'{bs.settings.plugin_path}/clusters/densityjsons/intrusiontraffic.json', 'r') as file:
@@ -225,9 +225,18 @@ class Clustering(core.Entity):
                                                                                 else (row['length'] * self.low_density_weight)), axis=1)
         # update the TrafficSpawner graph
         # # Update edge attributes in the graph
-        edge_lengths = {row.Index: row.adjusted_length for row in merged_df.itertuples()}
+        cluster_edge_lengths = {row.Index: row.adjusted_length for row in merged_df.itertuples()}
+        # also get the edges of the complete graph
+        full_edges = {row.Index: row.length for row in edges_df.itertuples()}
+        
+        # reset the lengths of the traffic spawner graph. These are the original graph lengths
+        for edge_label, length in full_edges.items():
+            bs.traf.TrafficSpawner.graph[edge_label[0]][edge_label[1]][edge_label[2]]['length'] = length 
 
-        for edge_label, adjusted_length in edge_lengths.items():
+        # apply the adjusted lengths to the graph
+        for edge_label, adjusted_length in cluster_edge_lengths.items():
+            old_length =  bs.traf.TrafficSpawner.graph[edge_label[0]][edge_label[1]][edge_label[2]]['length']
+            new_length = adjusted_length
             bs.traf.TrafficSpawner.graph[edge_label[0]][edge_label[1]][edge_label[2]]['length'] = adjusted_length 
 
         # select indices of edges in the medium or high category
