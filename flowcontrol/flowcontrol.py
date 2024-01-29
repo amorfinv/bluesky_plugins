@@ -37,10 +37,13 @@ def init_plugin():
     config = {
         'plugin_name'      : 'flowcontrol',
         'plugin_type'      : 'sim',
-        'reset'            : bs.traf.flowcontrol.reset()
+        'reset'            : reset
         }
     
     return config
+
+def reset():
+    bs.traf.flowcontrol.reset()
 
 class FlowControl(core.Entity):
     def __init__(self):
@@ -62,9 +65,24 @@ class FlowControl(core.Entity):
   
     def create(self, n=1):
         super().create(n)
-        self.last_replan[-n:] = bs.sim.simt
-        self.can_replan[-n:] = random.choices([True, False], self.replan_probabilities)
+        self.last_replan[-n:] = -99999
+        self.can_replan[-n:] = np.random.choice([True, False], p=self.replan_probabilities)
 
+
+    def reset(self):
+        
+        self.replan_time_limit = 60
+        self.enableflowcontrol = False
+        self.flowlog = datalog.crelog('FLOWLOG', None, flowheader)
+        
+        # default replan ratio
+        self.replan_ratio = 0.5
+        self.replan_probabilities = [self.replan_ratio, 1-self.replan_ratio]
+        
+        # initialize the numpy random seed
+        with self.settrafarrays():
+            self.last_replan = np.array([])
+            self.can_replan = np.array([])
 
     @stack.command 
     def ENABLEFLOWCONTROL(self):
@@ -85,9 +103,6 @@ class FlowControl(core.Entity):
     def STARTFLOWLOG(self):
         self.flowlog.start()
 
-    def reset(self):
-        self.enableflowcontrol = False
-
 ######################## FLOW CONTROL FUNCTIONS #########################
 
 @core.timed_function(dt=10)
@@ -95,7 +110,7 @@ def do_flowcontrol():
 
     if not bs.traf.flowcontrol.enableflowcontrol:
         return
-        
+
     # first apply some geovectors for aircraft
     apply_geovectors()
 
@@ -194,21 +209,19 @@ def replan(acid_to_replan):
         # TODO: check if plan actually changed
         # TODO: standardize edges as tuple
         # TODO: replan only affected area? 
-        lats, lons, edges, turns, node_route = plan_path(int(node_start_plan),int(node_end_plan))
+        lats, lons, edges, turns, route_nodes = plan_path(int(node_start_plan),int(node_end_plan))
+        check_new_plan = [node not in bs.traf.TrafficSpawner.route_nodes[acidx] for node in route_nodes]
+        
+        # check if the plan has changed here
+        if not np.any(check_new_plan):
+            continue
+        bs.traf.TrafficSpawner.route_nodes[acidx] = route_nodes
 
         # step 9: merge the starting routes with the new ones
         edges = start_edges + edges
         lats = np.concatenate((start_lats, lats))
         lons = np.concatenate((start_lons, lons))
         turns = np.concatenate((start_turns, turns))
-
-        # here check if plan has changed, check from second entry in new edges 
-        # because the first entry is the current aircraft position
-        new_edgeids = copy(edges[1:])
-        if old_edgeids == new_edgeids:
-            # if entering here then we have the same plan
-            # do not replan
-            continue
 
         # increment succesful replans
         succesful_replans += 1
