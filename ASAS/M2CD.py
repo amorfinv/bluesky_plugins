@@ -61,8 +61,8 @@ class M2CD(ConflictDetection):
         self.uniqueconfloslog = datalog.crelog('CDRWASLOSLOG', None, uniqueconflosheader)
 
         # cluster information
-        self.conf_cluster = []
-        self.los_cluster = []
+        self.conf_cluster = {}
+        self.los_cluster = {}
         
         # Conflict related
         self.prevconfpairs = set()
@@ -268,7 +268,7 @@ class M2CD(ConflictDetection):
                         bs.traf.lon[[idx1,idx2]]
                         )
                     )
-                if not bs.sim.simt in self.conf_cluster:
+                if not str(bs.sim.simt) in self.conf_cluster:
                     self.conf_cluster[str(bs.sim.simt)] = data_array
                 else:
                     # extend the array
@@ -303,7 +303,7 @@ class M2CD(ConflictDetection):
                     bs.traf.lon[[idx1,idx2]]
                     )
                 )
-            if not bs.sim.simt in self.los_cluster:
+            if not str(bs.sim.simt) in self.los_cluster:
                 self.los_cluster[str(bs.sim.simt)] = data_array
             else:
                 # extend the array
