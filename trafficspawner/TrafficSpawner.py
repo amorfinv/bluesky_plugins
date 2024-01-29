@@ -51,7 +51,7 @@ class TrafficSpawner(Entity):
         # Turn ASAS on
         # stack.stack('ASAS ON')
         # # Set a default seed
-        # stack.stack('SEED 12345')
+        #stack.stack('SEED 12345')
         
         # Logging related stuff
         self.prevconfpairs = set()
@@ -64,7 +64,7 @@ class TrafficSpawner(Entity):
             self.route_edges = []
             self.unique_edges = []
             self.original_route = []
-
+            self.route_nodes = []
             # Metrics
             self.distance2D = np.array([])
             self.distance3D = np.array([])
@@ -78,6 +78,7 @@ class TrafficSpawner(Entity):
         self.route_edges[-n:] = [0]*n # Default edge
         self.unique_edges[-n:] = [0]*n # Default edge
         self.original_route[-n:] = [0]*n
+        self.route_nodes[-n:] = [0]*n
         self.distance2D[-n:] = [0]*n
         self.distance3D[-n:] = [0]*n
         self.distancealt[-n:] = [0]*n
@@ -99,9 +100,9 @@ class TrafficSpawner(Entity):
         self.stop_conf = 10000
         self.stop_conf_enable = False
         # Turn ASAS on
-        stack.stack('ASAS ON')
+        #stack.stack('ASAS ON')
         # Set a default seed
-        stack.stack('SEED 12345')
+        #stack.stack('SEED 12345')
         
         # Logging related stuff
         self.prevconfpairs = set()
@@ -114,7 +115,7 @@ class TrafficSpawner(Entity):
             self.route_edges = []
             self.unique_edges = []
             self.original_route = []
-
+            self.route_nodes = []
             # Metrics
             self.distance2D = np.array([])
             self.distance3D = np.array([])
@@ -208,7 +209,6 @@ class TrafficSpawner(Entity):
                 
             # This pickle route has LAT, LON, EDGE, TURN. Unpack em
             lats, lons, edges, turns = list(zip(*pickled_route))
-
             # Check if any other aircraft is too close to the origin
             dist = kwikdist_matrix(np.array([lats[0]]), np.array([lons[0]]), bs.traf.lat, bs.traf.lon)
 
@@ -244,6 +244,11 @@ class TrafficSpawner(Entity):
             self.unique_edges[acidx] = np.array(unique_edges)
             self.original_route[acidx] = deepcopy(unique_edges)
 
+            # list of unique nodes
+            seen = set()
+            seen_add = seen.add
+            self.route_nodes[acidx] = [edge[0] for edge in edges if not (edge[0] in seen or seen_add(edge[0]))]
+            self.route_nodes[acidx].append(edges[-1][1])
 
             # Start adding waypoints
             for edgeid, lat, lon, turn in zip(edges, lats, lons, turns):
