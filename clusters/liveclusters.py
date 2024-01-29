@@ -16,7 +16,7 @@ from bluesky import core
 from bluesky.tools import datalog
 from bluesky.tools.aero import nm
 from bluesky.tools import areafilter as af
-from bluesky.stack import command
+from bluesky.stack import command, stack
 from plugins.clusters import cluster_algorithms as calgos
 
 clusterheader = \
@@ -41,14 +41,15 @@ def init_plugin():
     bs.traf.clustering = Clustering()
     # Configuration parameters
     config = {
-        # The name of your plugin
         'plugin_name':     'LIVECLUSTERING',
-
-        # The type of this plugin. For now, only simulation plugins are possible.
-        'plugin_type':     'sim'
+        'plugin_type':     'sim',
+        'reset': reset
     }
 
     return config
+
+def reset():
+    bs.traf.clustering.reset()
 
 class Clustering(core.Entity):
     def __init__(self):
@@ -98,20 +99,61 @@ class Clustering(core.Entity):
         super().create(n)
         self.cluster_labels[-n:] = -1
 
+    def reset(self):
 
-    @timed_function(dt=10)
+        # genereate the transformers
+        self.transformer_to_utm    = Transformer.from_crs("EPSG:4326", "EPSG:28992")
+        self.transformer_to_latlon = Transformer.from_crs("EPSG:28992", "EPSG:4326")
+
+        self.polygons_to_draw = []
+        self.draw_the_polygons = True
+
+        # a working cluster distance is 3000
+        self.distance_threshold = 3000
+
+        # make observation time to look at past data
+        self.observation_time = 10*60
+
+        # minimum number of aircraft to be considered a cluster
+        self.min_ntraf = 4
+
+        # polygon data
+        self.cluster_polygons = None
+
+        # log cluster data
+        self.clusterlog = datalog.crelog('CLUSTERLOG', None, clusterheader)
+
+        # edges to check for replanning
+        self.cluster_edges = []
+
+        # set the weights of the graph
+        self.low_density_weight = 1.0
+        self.medium_density_weight = 1.5
+        self.high_density_weight = 2
+        
+        # load the density dictionary
+        with open(f'{bs.settings.plugin_path}/clusters/densityjsons/livetraffic.json', 'r') as file:
+            # Load the JSON data into a dictionary
+            self.density_dictionary = json.load(file)
+
+        self.scen_density_dict = {}
+
+        with self.settrafarrays():
+            self.cluster_labels = np.array([])
+
     def delete_polygons(self):
         if not self.draw_the_polygons:
             return
         # first delete the areas from bluesky screen
-        for areaname, _ in self.polygons_to_draw:            
+        for areaname, *_ in self.polygons_to_draw:            
             af.deleteArea(areaname)
         
         self.polygons_to_draw = []
 
     @timed_function(dt=10)
     def clustering(self):
-
+        
+        self.delete_polygons()
         # A check just in case
         # scenario_name = bs.stack.get_scenname().split('_')
         # traf_count = int(scenario_name[1][4:])
@@ -140,7 +182,7 @@ class Clustering(core.Entity):
 
         # do k-means clustering and return the optimal labels
         optimal_labels = calgos.ward(features, self.distance_threshold)
-        
+
         # get number of clusters
         n_clusters = np.max(optimal_labels)+1
 
@@ -169,6 +211,9 @@ class Clustering(core.Entity):
 
         # cluster logginf
         self.update_logging()
+
+        # draw the polygons
+        self.draw_polygons()
 
         # code to plot in matplotlib
         # self.external_plotting(features, optimal_labels)
@@ -213,6 +258,17 @@ class Clustering(core.Entity):
         # select indices of edges in the medium or high category
         selected_indices = merged_df[merged_df['density_category'].isin(['medium', 'high'])].index
         selected_indices = [f'{u}-{v}' for u,v,_ in selected_indices]
+
+        # save polygons to draw later
+        if self.draw_the_polygons:
+            polygon_colors = {'low': 'green', 'medium': 'blue', 'high': 'red'}
+            for polygon in polygons.itertuples():
+                
+                labels = polygon.flow_group
+                polygon_geom = polygon.geometry
+                polygon_color = polygon_colors[polygon.density_category]
+                
+                self.polygons_to_draw.append((f'CLUSTER{labels}', polygon_geom, polygon_color))
         
         return polygons, selected_indices
 
@@ -319,8 +375,8 @@ class Clustering(core.Entity):
             polygon_data['geometry'].append(polygon)
 
             # save polygons to draw later
-            if self.draw_the_polygons:
-                self.polygons_to_draw.append((f'CLUSTER{optimal_label}', polygon))
+            #if self.draw_the_polygons:
+            #    self.polygons_to_draw.append((f'CLUSTER{optimal_label}', polygon))
 
         # create geodataframe of polygons
         poly_gdf = gpd.GeoDataFrame(polygon_data, index=polygon_data['flow_group'], crs='EPSG:28992')
@@ -328,16 +384,20 @@ class Clustering(core.Entity):
         
         return poly_gdf
 
-    @timed_function(dt=10)
+    #@timed_function(dt=10)
     def draw_polygons(self):
 
         if not self.draw_the_polygons:
             return
+
         # draw the polygons
-        for areaname, polygon in self.polygons_to_draw:            
+        for areaname, polygon, colour in self.polygons_to_draw:            
             lat, lon = self.transformer_to_latlon.transform(*polygon.exterior.coords.xy)
             coordinates = [x for pair in zip(lat, lon) for x in pair]
             af.defineArea(areaname, 'POLY', coordinates)
+ 
+            # set the color
+            stack(f'COLOUR {areaname} {colour}')
 
     def external_plotting(self, features, optimal_labels):
         for _, polygon in self.polygons_to_draw: 

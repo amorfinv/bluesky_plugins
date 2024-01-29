@@ -39,14 +39,15 @@ def init_plugin():
     bs.traf.clustering = Clustering()
     # Configuration parameters
     config = {
-        # The name of your plugin
         'plugin_name':     'INTRUSIONCLUSTERING',
-
-        # The type of this plugin. For now, only simulation plugins are possible.
-        'plugin_type':     'sim'
+        'plugin_type':     'sim',
+        'reset': reset
     }
 
     return config
+
+def reset():
+    bs.traf.clustering.reset()
 
 class Clustering(core.Entity):
     def __init__(self):
@@ -95,6 +96,46 @@ class Clustering(core.Entity):
         super().create(n)
         self.cluster_labels[-n:] = -1
 
+    def reset(self):
+       
+        # genereate the transformers
+        self.transformer_to_utm    = Transformer.from_crs("EPSG:4326", "EPSG:28992")
+        self.transformer_to_latlon = Transformer.from_crs("EPSG:28992", "EPSG:4326")
+
+        self.polygons_to_draw = []
+        self.draw_the_polygons = False
+
+        self.distance_threshold = 3000
+
+        # make observation time to look at past data
+        self.observation_time = 10*60
+
+        # minimum number of aircraft to be considered a cluster
+        self.min_ntraf = 4
+
+        # polygon data
+        self.cluster_polygons = None
+
+        # log cluster data
+        self.clusterlog = datalog.crelog('CLUSTERLOG', None, clusterheader)
+
+        # edges to check for replanning
+        self.cluster_edges = []
+
+        # set the weights of the graph
+        self.low_density_weight = 1.0
+        self.medium_density_weight = 1.5
+        self.high_density_weight = 2.0
+        
+        # load the density dictionary
+        with open(f'{bs.settings.plugin_path}/clusters/densityjsons/intrusiontraffic.json', 'r') as file:
+            # Load the JSON data into a dictionary
+            self.density_dictionary = json.load(file)
+
+        self.scen_density_dict = {}
+
+        with self.settrafarrays():
+            self.cluster_labels = np.array([])
 
     @timed_function(dt=10)
     def delete_polygons(self):
@@ -152,6 +193,9 @@ class Clustering(core.Entity):
         if len(features) == 0:
             return
 
+        # here we order the observations for peace of mind
+        features = features[np.argsort(features[:, 0])]
+        features = np.round(features)
         # normalize the observation matrix
         whitened = whiten(features)
 
