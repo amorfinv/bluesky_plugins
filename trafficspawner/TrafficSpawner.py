@@ -142,6 +142,9 @@ class TrafficSpawner(Entity):
         nodes = gpd.read_file(f'{self.path}/updated.gpkg', layer='nodes')
         edges = gpd.read_file(f'{self.path}/updated.gpkg', layer='edges')
 
+        # round
+        edges['length'] = edges['length'].round(2)
+
         # set the indices 
         edges.set_index(['u', 'v', 'key'], inplace=True)
         nodes.set_index(['osmid'], inplace=True)
@@ -151,14 +154,14 @@ class TrafficSpawner(Entity):
         nodes['y'] = nodes['geometry'].apply(lambda x: x.y)
 
         G = ox.graph_from_gdfs(nodes, edges)
-        G_original = ox.graph_from_gdfs(nodes, edges)
+        G_original = deepcopy(G)
 
         # convert both to CRS:28992
         edges_transformed = edges.to_crs('EPSG:28992')
         nodes_transformed = nodes.to_crs('EPSG:28992')
 
         # now add an edge length attribute
-        edges_transformed['length'] =  edges_transformed['geometry'].apply(lambda x: x.length)
+        #edges_transformed['length'] =  edges_transformed['geometry'].apply(lambda x: x.length)
 
         # force create spatial index
         edges_transformed.sindex

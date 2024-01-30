@@ -35,10 +35,10 @@ def lat_lon_from_nx_route(G, route):
     linestring : shapely.LineString.
         LineString with lat and lon of route.
     """
-    # add first node to route
-    lons = np.array(G.nodes[route[0]]["x"])
-    lats = np.array(G.nodes[route[0]]["y"])
-    edges = [f'{route[0]}-{route[1]}']
+    # initalize variables
+    lons = np.array([])
+    lats = np.array([])
+    edges = []
 
     # loop through the rest for loop only adds from second point of edge
     for u, v in zip(route[:-1], route[1:]):
