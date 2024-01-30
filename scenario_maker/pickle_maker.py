@@ -45,7 +45,6 @@ nodes.set_index(['osmid'], inplace=True)
 edges.set_index(['u', 'v', 'key'], inplace=True)
 
 G = ox.graph_from_gdfs(nodes, edges)
-G = ox.distance.add_edge_lengths(G)
 
 # Let's make some origin and destinations from this graph
 nodes_already_added = []
@@ -105,7 +104,7 @@ def make_route_pickle(inp):
     
     if dist > min_dist:
         # Create the path for these two nodes
-        route = nx.shortest_path(G, orig_node, dest_node, weight='length')
+        route = ox.shortest_path(G, orig_node, dest_node, weight='length')
         # Extract the path geometry
         geoms = [edges.loc[(u, v, 0), 'geometry'] for u, v in zip(route[:-1], route[1:])]
         line = linemerge(geoms)

@@ -142,9 +142,6 @@ class TrafficSpawner(Entity):
         nodes = gpd.read_file(f'{self.path}/updated.gpkg', layer='nodes')
         edges = gpd.read_file(f'{self.path}/updated.gpkg', layer='edges')
 
-        # round
-        edges['length'] = edges['length'].round(2)
-
         # set the indices 
         edges.set_index(['u', 'v', 'key'], inplace=True)
         nodes.set_index(['osmid'], inplace=True)
