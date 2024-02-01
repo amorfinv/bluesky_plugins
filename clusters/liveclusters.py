@@ -106,7 +106,7 @@ class Clustering(core.Entity):
         self.transformer_to_latlon = Transformer.from_crs("EPSG:28992", "EPSG:4326")
 
         self.polygons_to_draw = []
-        self.draw_the_polygons = True
+        self.draw_the_polygons = False
 
         # a working cluster distance is 3000
         self.distance_threshold = 3000
@@ -264,6 +264,8 @@ class Clustering(core.Entity):
             polygon_colors = {'low': 'green', 'medium': 'blue', 'high': 'red'}
             for polygon in polygons.itertuples():
                 
+                if polygon.density_category == 'low':
+                    continue
                 labels = polygon.flow_group
                 polygon_geom = polygon.geometry
                 polygon_color = polygon_colors[polygon.density_category]
