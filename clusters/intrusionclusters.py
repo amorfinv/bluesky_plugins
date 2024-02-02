@@ -195,7 +195,7 @@ class Clustering(core.Entity):
 
         # here we order the observations for peace of mind
         features = features[np.argsort(features[:, 0])]
-        features = np.round(features)
+        # features = np.round(features)
         # normalize the observation matrix
         whitened = whiten(features)
 
