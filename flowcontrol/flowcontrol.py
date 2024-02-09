@@ -222,8 +222,11 @@ def replan(acid_to_replan):
         # TODO: standardize edges as tuple
         # TODO: replan only affected area? 
         lats, lons, edges, turns, route_nodes = plan_path(int(node_start_plan),int(node_end_plan))
-        check_new_plan = [node not in bs.traf.TrafficSpawner.route_nodes[acidx] for node in route_nodes]
         
+        # skip replan if a end of route
+        if len(route_nodes) < 4:
+            continue
+        check_new_plan = [node not in bs.traf.TrafficSpawner.route_nodes[acidx] for node in route_nodes]
         # check if the plan has changed here
         if not np.any(check_new_plan):
             continue
@@ -369,13 +372,11 @@ def plan_path(orig_node, dest_node) -> None:
     
     # todo: CREM2 with nearest nodes
     node_route = ox.shortest_path(bs.traf.TrafficSpawner.graph, orig_node, dest_node, weight='length')
+    
     # get lat and lon from route and turninfo
-    lats, lons, edges, _ = pluginutils.lat_lon_from_nx_route(bs.traf.TrafficSpawner.graph, node_route)
+    lats, lons, edges = pluginutils.lat_lon_from_nx_route(bs.traf.TrafficSpawner.graph, node_route)
     # TODO: standardise with picklemaker
     turn_bool, _, _ = pluginutils.get_turn_arrays(lats, lons)
-    
-    # get initial bearing
-    _, _ = geo.qdrdist(lats[0], lons[0], lats[1], lons[1])
     
     return lats, lons, edges, turn_bool, node_route
 

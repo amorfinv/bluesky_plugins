@@ -60,9 +60,9 @@ def lat_lon_from_nx_route(G, route):
         lats = np.append(lats, ys[1:])
 
     # make a linestring from the coords
-    linestring = LineString(zip(lons, lats))
+    #linestring = LineString(zip(lons, lats))
     
-    return lats, lons, edges, linestring
+    return lats, lons, edges
 
 def get_turn_arrays(lats, lons, cutoff_angle=25):
     """
