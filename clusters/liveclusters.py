@@ -30,7 +30,7 @@ clusterheader = \
     'Geometry [wkt], ' + \
     'Summed edged length [m], ' + \
     'Cluster linear densities  [m], ' + \
-    'Cluster area densities [-]\n'
+    'Density category [-]\n'
 
 clustering = None
 
@@ -417,13 +417,13 @@ class Clustering(core.Entity):
         geometry = self.cluster_polygons['geometry']
         edge_length = self.cluster_polygons['edge_length']
         linear_densities = self.cluster_polygons['ac_linear_density']
-        area_densities = self.cluster_polygons['ac_area_density']
+        density_category = self.cluster_polygons['density_category']
 
         self.clusterlog.log(*ac_count)
         self.clusterlog.log(*geometry)
         self.clusterlog.log(*edge_length)
         self.clusterlog.log(*linear_densities)
-        self.clusterlog.log(*area_densities)
+        self.clusterlog.log(*density_category)
 
         pass
 
