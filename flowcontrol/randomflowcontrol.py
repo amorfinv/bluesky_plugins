@@ -1,8 +1,7 @@
 import numpy as np
-import networkx as nx
+import osmnx as ox
 from itertools import groupby
-from copy import copy
-import random
+from copy import copy, deepcopy
 
 import bluesky as bs
 from bluesky import core, stack
@@ -25,7 +24,11 @@ flowheader = \
     'Number of attempted replans[-], ' + \
     'Number of successful replans[-], ' + \
     'Succesful replans/attempted replans * 100[%], ' + \
-    'Succesful replans / Number of aircraft in air * 100 [%]\n'
+    'Succesful replans / Number of aircraft in air * 100 [%], ' + \
+    'Close turn replans [-]' + \
+    'Number of replans resulting in longer distance [-]' + \
+    'Number of replan resulting in shorter distance [-]' + \
+    'Number of replans giving shortest path [-]\n'
 
 
 def init_plugin():
@@ -55,6 +58,9 @@ class FlowControl(core.Entity):
         # ratio of aircraft that can replan every 10 seconds 8%
         self.replan_limit = 0.08
 
+        # make a new random generator for the shuffling process
+        self.flowrng = np.random.default_rng(1)
+
 
         with self.settrafarrays():
             self.last_replan = np.array([])
@@ -63,8 +69,8 @@ class FlowControl(core.Entity):
   
     def create(self, n=1):
         super().create(n)
-        self.last_replan[-n:] = bs.sim.simt
-        self.can_replan[-n:] = random.choices([True, False], self.replan_probabilities)
+        self.last_replan[-n:] = -99999
+        self.can_replan[-n:] = np.random.choice([True, False], p=self.replan_probabilities)
 
 
     @stack.command 
@@ -86,8 +92,29 @@ class FlowControl(core.Entity):
     def STARTFLOWLOG(self):
         self.flowlog.start()
 
+    @stack.command 
+    def FLOWSEED(self, seed:int):
+        self.flowrng = np.random.default_rng(seed)
+
     def reset(self):
+
+        self.replan_time_limit = 60
         self.enableflowcontrol = False
+        self.flowlog = datalog.crelog('FLOWLOG', None, flowheader)
+        
+        # default replan ratio
+        self.replan_ratio = 0.5
+        self.replan_probabilities = [self.replan_ratio, 1-self.replan_ratio]
+
+        # ratio of aircraft that can replan every 10 seconds 8%
+        self.replan_limit = 0.08
+
+        # make a new random generator for the shuffling process
+        self.flowrng = np.random.default_rng(1)
+
+        with self.settrafarrays():
+            self.last_replan = np.array([])
+            self.can_replan = np.array([])
 
 ######################## FLOW CONTROL FUNCTIONS #########################
 
@@ -104,10 +131,10 @@ def do_flowcontrol():
     acid_to_replan = aircraft_to_replan()
     
     # replan the planns
-    attempted_replans, succesful_replans = replan(acid_to_replan)
+    attempted_replans, succesful_replans, close_turn_replans, longer_replans_old, shorter_replans_old, shortest_path_replan = replan(acid_to_replan)
 
     # update logging
-    update_logging(attempted_replans, succesful_replans)
+    update_logging(attempted_replans, succesful_replans, close_turn_replans, longer_replans_old, shorter_replans_old, shortest_path_replan)
 
 def apply_geovectors():
     pass
@@ -137,16 +164,21 @@ def aircraft_to_replan():
 
     # here shuffle the acid to replan
     if len(acid_to_replan):
-        random.shuffle(acid_to_replan)    
+        bs.traf.flowcontrol.flowrng.shuffle(acid_to_replan)    
 
     return acid_to_replan
 
 
 def replan(acid_to_replan):
     # start replanning
+
     # track total replans
     attempted_replans = len(acid_to_replan)
     succesful_replans = 0
+    close_turn_replans = 0
+    longer_replans_old = 0
+    shorter_replans_old = 0
+    shortest_path_replan = 0
 
     for acid, acidx in acid_to_replan:
 
@@ -172,13 +204,11 @@ def replan(acid_to_replan):
 
         plan_edgeid = bs.traf.TrafficSpawner.unique_edges[acidx][index_unique+1]
         index_start_plan = bs.traf.edgetraffic.edgeap.edge_rou[acidx].wpedgeid.index(plan_edgeid)
-
-        # also save old plan to see if it has changed
-        old_edgeids = copy(bs.traf.edgetraffic.edgeap.edge_rou[acidx].wpedgeid)[active_waypoint:]
         
         # NOTE: the current plan should not change from current edgeid to first entry of plan_edgeid which is the index_next_final
         
         # step 5: gather the data that will stay the same in the plan
+        current_turn = bs.traf.edgetraffic.edgeap.edge_rou[acidx].turn[active_waypoint]
         start_edges = bs.traf.edgetraffic.edgeap.edge_rou[acidx].wpedgeid[active_waypoint:index_start_plan]
         start_turns = np.array(bs.traf.edgetraffic.edgeap.edge_rou[acidx].turn[active_waypoint:index_start_plan])
         start_lats  = np.array(bs.traf.ap.route[acidx].wplat[active_waypoint:index_start_plan])
@@ -193,27 +223,35 @@ def replan(acid_to_replan):
         # step 7: select node to start plan from and final node
         node_start_plan = plan_edgeid.split('-')[0]
         node_end_plan = bs.traf.TrafficSpawner.unique_edges[acidx][-1].split('-')[1]
+        
+        # get old plan plan length
+        old_nodes = deepcopy(bs.traf.TrafficSpawner.route_nodes[acidx])
+        idx_old = old_nodes.index(int(node_start_plan))
+        old_nodes = old_nodes[idx_old:]
+        old_plan_length = get_route_length(old_nodes)
 
         # step 8: find a new route
         # TODO: merge it into one function with TrafficSpawner
         # TODO: check if plan actually changed
         # TODO: standardize edges as tuple
         # TODO: replan only affected area? 
-        lats, lons, edges, turns = plan_path(int(node_start_plan),int(node_end_plan))
+        lats, lons, edges, turns, route_nodes = plan_path(int(node_start_plan),int(node_end_plan))
+        
+        # skip replan if a end of route
+        if len(route_nodes) < 4:
+            continue
+        check_new_plan = [node not in bs.traf.TrafficSpawner.route_nodes[acidx] for node in route_nodes]
+        # check if the plan has changed here
+        if not np.any(check_new_plan):
+            continue
+        bs.traf.TrafficSpawner.route_nodes[acidx] = route_nodes
 
         # step 9: merge the starting routes with the new ones
         edges = start_edges + edges
         lats = np.concatenate((start_lats, lats))
         lons = np.concatenate((start_lons, lons))
-        turns = np.concatenate((start_turns, turns))
-
-        # here check if plan has changed, check from second entry in new edges 
-        # because the first entry is the current aircraft position
-        new_edgeids = copy(edges[1:])
-        if old_edgeids == new_edgeids:
-            # if entering here then we have the same plan
-            # do not replan
-            continue
+        # create the turn bool with the updated information
+        turns, _, _ = pluginutils.get_turn_arrays(lats, lons)
 
         # increment succesful replans
         succesful_replans += 1
@@ -265,10 +303,70 @@ def replan(acid_to_replan):
         if len(unique_continuous_edges) != len(set_continuous_edges):
             print('ERROR NON continuous edges!')
 
-    return attempted_replans, succesful_replans
+        if turns[1] and not current_turn:
 
-def update_logging(attempted_replans, succesful_replans):
+            # here log cases where the aircraft is forced to turn during a replan
+            _,dist_between_points = geo.qdrdist(
+                    bs.traf.lat[acidx], 
+                    bs.traf.lon[acidx], 
+                    lats[1], 
+                    lons[1]
+                    )
+            dist_m = dist_between_points*bs.tools.aero.nm
+            if dist_m < 5:
+                close_turn_replans += 1
 
+        # TODO: FINAL step is to gather information about the new plan and compare
+        length_diff_true, length_diff_old = evaluate_new_route(route_nodes, node_start_plan, node_end_plan, old_plan_length)
+
+        if length_diff_old > 0:
+            longer_replans_old += 1
+        else:
+            shorter_replans_old += 1
+
+        if length_diff_true > 0:
+            shortest_path_replan += 1
+
+    return attempted_replans, succesful_replans, close_turn_replans, longer_replans_old, shorter_replans_old, shortest_path_replan
+
+def evaluate_new_route(route_nodes, node_start_plan, node_end_plan, old_plan_length):
+    
+    # get length of current plan
+    length_new = get_route_length(route_nodes)
+    
+    # get true shortest path
+    true_shortest_path = ox.shortest_path(bs.traf.TrafficSpawner.original_graph, int(node_start_plan), int(node_end_plan), weight='length')
+    
+    # get length of true shortest route
+    length_true = get_route_length(true_shortest_path)
+    # get difference of new length with true shortest path
+    length_diff_true = length_new - length_true
+
+    # get difference of new length with previous path
+    length_diff_old = length_new - old_plan_length
+
+    # now get a bunch of shortest paths with the real lengths
+    #many_plans = ox.k_shortest_paths(bs.traf.TrafficSpawner.original_graph, int(node_start_plan), int(node_end_plan), 30, weight='length')
+    # get length of first route
+    #lengths_plans = []
+    #idx_new_plan = None
+    #for idx, plan in enumerate(many_plans):
+    #    length = get_route_length(plan)
+    #    lengths_plans.append(length)
+
+    #    if plan == route_nodes:
+    #        idx_new_plan = idx
+    return length_diff_true, length_diff_old
+
+def get_route_length(node_list):
+    # get the true route length and not adjusted one
+    edges_route = [(node_list[i], node_list[i+1],0) for i in range(len(node_list)-1)]
+    length = bs.traf.TrafficSpawner.edges.loc[edges_route].length.sum()
+
+    return length
+
+
+def update_logging(attempted_replans, succesful_replans, close_turn_replans, longer_replans_old, shorter_replans_old, shortest_path_replan):
     if attempted_replans == 0:
         return
 
@@ -277,22 +375,22 @@ def update_logging(attempted_replans, succesful_replans):
         attempted_replans,
         succesful_replans,
         (succesful_replans/attempted_replans) * 100,
-        (succesful_replans/bs.traf.ntraf) * 100
+        (succesful_replans/bs.traf.ntraf) * 100,
+        close_turn_replans,
+        longer_replans_old,
+        shorter_replans_old,
+        shortest_path_replan
     )
 
 def plan_path(orig_node, dest_node) -> None:
     
     # todo: CREM2 with nearest nodes
-    node_route = nx.shortest_path(bs.traf.TrafficSpawner.graph, orig_node, dest_node, weight='length', method='dijkstra')
-
+    node_route = ox.shortest_path(bs.traf.TrafficSpawner.graph, orig_node, dest_node, weight='length')
+    
     # get lat and lon from route and turninfo
-    lats, lons, edges, _ = pluginutils.lat_lon_from_nx_route(bs.traf.TrafficSpawner.graph, node_route)
-
+    lats, lons, edges = pluginutils.lat_lon_from_nx_route(bs.traf.TrafficSpawner.graph, node_route)
     # TODO: standardise with picklemaker
     turn_bool, _, _ = pluginutils.get_turn_arrays(lats, lons)
-
-    # get initial bearing
-    _, _ = geo.qdrdist(lats[0], lons[0], lats[1], lons[1])
     
-    return lats, lons, edges, turn_bool
+    return lats, lons, edges, turn_bool, node_route
 

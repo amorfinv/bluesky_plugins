@@ -3,8 +3,6 @@ import networkx as nx
 import osmnx as ox
 from itertools import groupby
 from copy import copy, deepcopy
-import random
-from collections import OrderedDict
 
 import bluesky as bs
 from bluesky import core, stack
