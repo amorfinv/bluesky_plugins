@@ -146,20 +146,20 @@ def aircraft_to_replan():
         replan_time = bs.sim.simt - bs.traf.flowcontrol.last_replan[acidx]
         if replan_time <  bs.traf.flowcontrol.replan_time_limit:
             continue
-            
-        # if aircraft has not done a replan recently then we get their unique travel edges
-        unique_edges = bs.traf.TrafficSpawner.unique_edges[acidx]
 
-        # now check if the unique edges are part of the edges that need a replan
-        if not np.any(np.isin(unique_edges,bs.traf.clustering.cluster_edges)):
-            continue
-        
         # perform the probability check
         # select number between 0 and 1
         replan_probability = bs.traf.flowcontrol.ac_replan_rng.random()
 
         # check if number is less than the replan ratio
         if not replan_probability <= bs.traf.flowcontrol.replan_ratio:
+            continue
+            
+        # if aircraft has not done a replan recently then we get their unique travel edges
+        unique_edges = bs.traf.TrafficSpawner.unique_edges[acidx]
+
+        # now check if the unique edges are part of the edges that need a replan
+        if not np.any(np.isin(unique_edges,bs.traf.clustering.cluster_edges)):
             continue
 
         # if it passes this step then we replan
