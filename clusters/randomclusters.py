@@ -62,6 +62,8 @@ class Clustering(core.Entity):
         # make a new random generator for the shuffling process
         self.clustrng = np.random.default_rng(1)
 
+        self.cluster_edges = []
+
     def reset(self):
         # set the density weights
         self.low_density_weight = 1.0
@@ -101,6 +103,11 @@ class Clustering(core.Entity):
 
         # Apply conditions based on 'density_category'
         edges_df['adjusted_length'] = edges_df['length'] * random_values
+
+        # get edges that have adjusted weights
+        selected_indices = edges_df.index[(random_values == self.medium_density_weight) | (random_values == self.high_density_weight)].tolist()
+        selected_indices = [f'{u}-{v}' for u,v,_ in selected_indices]
+        self.cluster_edges = selected_indices
 
         # update the TrafficSpawner graph
         # # Update edge attributes in the graph

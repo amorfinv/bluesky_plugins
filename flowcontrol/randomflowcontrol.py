@@ -60,18 +60,14 @@ class FlowControl(core.Entity):
 
         # make a new random generator for the shuffling process
         self.flowrng = np.random.default_rng(1)
-
+        self.ac_replan_rng = np.random.default_rng(1)
 
         with self.settrafarrays():
             self.last_replan = np.array([])
-            self.can_replan = np.array([])
 
-  
     def create(self, n=1):
         super().create(n)
         self.last_replan[-n:] = -99999
-        self.can_replan[-n:] = np.random.choice([True, False], p=self.replan_probabilities)
-
 
     @stack.command 
     def ENABLEFLOWCONTROL(self):
@@ -94,7 +90,8 @@ class FlowControl(core.Entity):
 
     @stack.command 
     def FLOWSEED(self, seed:int):
-        self.flowrng = np.random.default_rng(seed)
+        self.ac_replan_rng = np.random.default_rng(seed)
+        self.flowrng = np.random.default_rng(seed+2)
 
     def reset(self):
 
@@ -109,12 +106,12 @@ class FlowControl(core.Entity):
         # ratio of aircraft that can replan every 10 seconds 8%
         self.replan_limit = 0.08
 
-        # make a new random generator for the shuffling process
+        # make a new random generator for the shuffling process and replan
         self.flowrng = np.random.default_rng(1)
+        self.ac_replan_rng = np.random.default_rng(1)
 
         with self.settrafarrays():
             self.last_replan = np.array([])
-            self.can_replan = np.array([])
 
 ######################## FLOW CONTROL FUNCTIONS #########################
 
@@ -149,14 +146,26 @@ def aircraft_to_replan():
     acid_to_replan = []
 
     for acidx, acid in enumerate(bs.traf.id):
-
-        if not bs.traf.flowcontrol.can_replan[acidx]:
-            continue
         
         # First check that the current aircraft has not done a replan 
         # within the self.replan time limit
         replan_time = bs.sim.simt - bs.traf.flowcontrol.last_replan[acidx]
         if replan_time <  bs.traf.flowcontrol.replan_time_limit:
+            continue
+
+        # perform the probability check
+        # select number between 0 and 1
+        replan_probability = bs.traf.flowcontrol.ac_replan_rng.random()
+
+        # check if number is less than the replan ratio
+        if not replan_probability <= bs.traf.flowcontrol.replan_ratio:
+            continue
+
+        # if aircraft has not done a replan recently then we get their unique travel edges
+        unique_edges = bs.traf.TrafficSpawner.unique_edges[acidx]
+
+        # now check if the unique edges are part of the edges that need a replan
+        if not np.any(np.isin(unique_edges,bs.traf.clustering.cluster_edges)):
             continue
         
         # allow an aircraft to replan potentially
