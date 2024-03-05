@@ -89,6 +89,9 @@ class Clustering(core.Entity):
 
         self.scen_density_dict = {}
 
+        # set the density cutoff
+        self.low_density_cutoff = '0.25'
+        self.medium_density_cutoff = '0.50'
 
         with self.settrafarrays():
             self.cluster_labels = np.array([])
@@ -130,7 +133,10 @@ class Clustering(core.Entity):
             self.density_dictionary = json.load(file)
 
         self.scen_density_dict = {}
-
+        
+        # set the density cutoff
+        self.low_density_cutoff = '0.25'
+        self.medium_density_cutoff = '0.50'
 
         with self.settrafarrays():
             self.cluster_labels = np.array([])
@@ -254,9 +260,9 @@ class Clustering(core.Entity):
     def apply_density_rules(self, polygons, edges_df):
 
         # anything below this cutoff is low density and above is medium density
-        low_linear_density = self.scen_density_dict['0.25']
+        low_linear_density = self.scen_density_dict[ self.low_density_cutoff]
         # anything above this cutoff is high density
-        medium_linear_density = self.scen_density_dict['0.50']
+        medium_linear_density = self.scen_density_dict[self.medium_density_cutoff]
 
         # Categorize the density into three categories
         polygons['density_category'] = pd.cut(polygons['conf_linear_density'],
@@ -466,3 +472,8 @@ class Clustering(core.Entity):
         self.medium_density_weight = medium_density_weight
         self.high_density_weight = high_density_weight
 
+    @command 
+    def SETDENSITYCUTOFF(self, medium_density_cutoff:str, high_density_cutoff:str):
+        # set the cutoff
+        self.low_density_cutoff = medium_density_cutoff
+        self.medium_density_cutoff = high_density_cutoff
