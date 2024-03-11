@@ -8,7 +8,7 @@ import pandas as pd
 from pyproj import Transformer
 import matplotlib.pyplot as plt
 from collections import Counter
-from rich.pretty import pprint
+from collections import defaultdict
 
 import bluesky as bs
 from bluesky.core.simtime import timed_function
@@ -161,19 +161,8 @@ class Clustering(core.Entity):
     @timed_function(dt=10)
     def clustering(self):
         
+        # delete polygons in screen
         self.delete_polygons()
-        # A check just in case
-        # scenario_name = bs.stack.get_scenname().split('_')
-        # traf_count = int(scenario_name[1][4:])
-        # clust_dist_val = int(scenario_name[2][5:])
-
-        # if self.distance_threshold != clust_dist_val:
-        #     print('ERROR WITH REIMPLEMENT!')
-        #     print('----------------------------')
-
-        # if bs.traf.TrafficSpawner.target_ntraf != traf_count:
-        #     print('ERROR WITH REIMPLEMENT!')
-        #     print('----------------------------')
         
         if bs.traf.ntraf < 2:
             return
@@ -313,23 +302,63 @@ class Clustering(core.Entity):
     
     def edges_intersect(self, polygons):
 
-        # Check for intersections, Note this returns integer indices
-        poly_indices, edge_indices = bs.traf.TrafficSpawner.edges.sindex.query_bulk(polygons['geometry'], predicate="intersects")
+        # Check for intersections, Note this returns integer indices so .iloc
+        poly_intersection_indices, edge_intersection_indices = bs.traf.TrafficSpawner.edges.sindex.query_bulk(polygons['geometry'], predicate="intersects")
 
-        # Check if there are repeated values in the edge_indices, if yes then an edge is part of several polygons
-        # TODO: fix these case
-        has_repeated_values = len(np.unique(edge_indices)) < len(edge_indices)
-
-        # if has_repeated_values:
-        #     print("The array has repeated values.")
-
-        # convert to regular index
-        poly_indices = polygons.iloc[poly_indices].index.to_numpy()
-        edge_indices = bs.traf.TrafficSpawner.edges.iloc[edge_indices].index
-        edge_index_strings = [f'{u}-{v}' for u, v, key in edge_indices]
+        # convert to regular indices wheich is .loc
+        poly_indices = polygons.iloc[poly_intersection_indices].index.to_numpy()
+        edge_indices = bs.traf.TrafficSpawner.edges.iloc[edge_intersection_indices].index
+        edge_index_strings = [f'{u}-{v}' for u, v, _ in edge_indices]
 
         # create a geoseries using the poly indices to merge it with the original edge_gdf
         new_series = pd.Series(poly_indices, index=edge_indices, dtype=int)
+
+        # Check if there are repeated values in the edge_indices, if yes then an edge is part of several polygons with .iloc
+        has_repeated_values = len(np.unique(edge_intersection_indices)) < len(edge_intersection_indices)
+        if has_repeated_values:
+
+            # if there are repeated values then we select the one in which the length of the edge is highest
+
+            # here keeep a note of which edge indices intersect multiple clusters get these in .loc format
+            repeated_dict = defaultdict(list)
+            for edge_value, polygon_value in zip(edge_intersection_indices, poly_intersection_indices):
+                key = bs.traf.TrafficSpawner.edges.iloc[edge_value].name
+                value = polygons.iloc[polygon_value].name
+                repeated_dict[key].append(value)
+            repeat_edges = {key: value for key, value in repeated_dict.items() if len(value) > 1}
+
+            # get polygons to check
+            polygons_with_repeats = [item for sublist in repeat_edges.values() for item in sublist]
+            polygons_with_repeats = list(set(polygons_with_repeats))
+
+            # here check which polygon has the largest part of the edge
+            selected_polygons = {key: None for key in repeat_edges.keys()}
+            for edge_value, polygon_value in repeat_edges.items():
+                # get the edge geometry
+                edge_geometry = bs.traf.TrafficSpawner.edges.loc[edge_value].geometry
+                intersection_lengths = []
+                for poly_intersect in polygon_value:
+                    # get polygon geometry
+                    polygon_geometry = polygons.loc[poly_intersect].geometry
+                    # get length of intersection
+                    intersection_length = edge_geometry.intersection(polygon_geometry).length
+                    intersection_lengths.append((poly_intersect, intersection_length))
+                
+                # here select the polygon that contains the highest length of the edge
+                max_intersection = max(intersection_lengths, key=lambda x: x[1])
+
+                # choose this polygon for the given edge
+                selected_polygons[edge_value] = max_intersection[0]
+
+            # now we update the new series based on repeated polygons 
+            # remove the duplicates
+            new_series = new_series[~new_series.index.duplicated(keep='first')] 
+
+            # assign correct value to the series
+            for duplicate_edge, polygon_choice in selected_polygons.items():
+                u,v,key = duplicate_edge
+                new_series[u,v,key] = polygon_choice
+                    
 
         # merge the dataframes and create a new one with the flow_group info
         new_edges_df = pd.merge(
