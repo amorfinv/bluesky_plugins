@@ -7,8 +7,7 @@ import geopandas as gpd
 import pandas as pd
 from pyproj import Transformer
 import matplotlib.pyplot as plt
-from collections import Counter
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 import bluesky as bs
 from bluesky.core.simtime import timed_function
@@ -352,13 +351,17 @@ class Clustering(core.Entity):
 
             # now we update the new series based on repeated polygons 
             # remove the duplicates
-            new_series = new_series[~new_series.index.duplicated(keep='first')] 
+            new_series = new_series[~new_series.index.duplicated(keep='first')]
 
             # assign correct value to the series
             for duplicate_edge, polygon_choice in selected_polygons.items():
                 u,v,key = duplicate_edge
                 new_series[u,v,key] = polygon_choice
-                    
+
+            # get these values for the updated datfarme as they are used to update the graph
+            poly_indices = new_series.to_list()
+            edge_indices = new_series.index.to_list()
+            edge_index_strings = [f'{u}-{v}' for u, v, _ in edge_indices] 
 
         # merge the dataframes and create a new one with the flow_group info
         new_edges_df = pd.merge(
