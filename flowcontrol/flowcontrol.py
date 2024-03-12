@@ -116,6 +116,10 @@ def do_flowcontrol():
 
     if not bs.traf.flowcontrol.enableflowcontrol:
         return
+    
+    # start flow control at 10 mins
+    if bs.sim.simt <= 600:
+        return
 
     # first apply some geovectors for aircraft
     apply_geovectors()
