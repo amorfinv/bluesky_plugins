@@ -21,11 +21,10 @@ from bluesky.traffic import Route
 from plugins.utils import pluginutils
 
 bs.settings.set_variable_defaults(
-    graph_dir=f'plugins/scenario_maker/Rotterdam/')
+    graph_dir=f'plugins/scenario_maker/Vienna/')
 
 # create classes
 edge_traffic = None
-path_plans = None
 
 def init_plugin():
     
@@ -33,9 +32,6 @@ def init_plugin():
 
     # Initialize EdgeTraffic
     edge_traffic = EdgeTraffic(bs.settings.graph_dir)
-
-    # Initialize Path Plans
-    path_plans = PathPlans(bs.settings.graph_dir)
 
     config = {
         'plugin_name'      : 'streets',
@@ -405,52 +401,4 @@ def osmid_to_latlon(osmid , i=2):
 
     return node_lat, node_lon
 
-######################### PATH PLANNING #######################
 
-class PathPlans(Entity):
-    def __init__(self, graph_dir):
-        super().__init__()
-        
-        with self.settrafarrays():
-            self.pathplanning = []
-
-        # read in graph with networkx from graphml
-        self.graph = ox.load_graphml(f'{graph_dir}updated.graphml')
-        self.node_gdf, self.edge_gdf = ox.graph_to_gdfs(self.graph)
-        
-        # get a projected dataframe of the graph
-        self.node_gdf_proj = self.node_gdf.to_crs(epsg=32633)
-        self.edge_gdf_proj = self.edge_gdf.to_crs(epsg=32633)
-        
-        # make a KDtree for the nodes
-        self.kdtree = KDTree(self.node_gdf_proj[["x", "y"]])
-
-        # create the variables for origin and destination
-        self.origin = (0.0, 0.0)
-        self.destination = (0.0, 0.0)
-
-            
-    def create(self, n = 1):
-        super().create(n)
-
-        self.pathplanning[-n:] = (0,)
-
-
-    def plan_path(self) -> None:
-        
-        # todo: CREM2 with nearest nodes
-        orig_node = ox.nearest_nodes(self.graph, self.node_gdf_proj, self.origin[1], self.origin[0])
-        dest_node = ox.nearest_nodes(self.graph, self.node_gdf_proj, self.destination[1], self.destination[0])
-        node_route = nx.shortest_path(self.graph, orig_node, dest_node, method='dijkstra')
-
-        # get lat and lon from route and turninfo
-        lats, lons, edges, _ = pluginutils.lat_lon_from_nx_route(self.graph, node_route)
-        turn_bool, turn_speed, turn_coords = pluginutils.get_turn_arrays(lats, lons)
-        
-        # lat lon route
-        route = list(zip(lats, lons))
-
-        # get initial bearing
-        qdr, _ = geo.qdrdist(lats[0], lons[0], lats[1], lons[1])
-        
-        return route, turn_bool, edges, turn_coords, turn_speed, qdr

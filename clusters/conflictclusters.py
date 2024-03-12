@@ -55,8 +55,8 @@ class Clustering(core.Entity):
         super().__init__() 
 
         # genereate the transformers
-        self.transformer_to_utm    = Transformer.from_crs("EPSG:4326", "EPSG:28992")
-        self.transformer_to_latlon = Transformer.from_crs("EPSG:28992", "EPSG:4326")
+        self.transformer_to_utm    = Transformer.from_crs("EPSG:4326", "EPSG:32633")
+        self.transformer_to_latlon = Transformer.from_crs("EPSG:32633", "EPSG:4326")
 
         self.polygons_to_draw = []
         self.draw_the_polygons = False
@@ -100,8 +100,8 @@ class Clustering(core.Entity):
     def reset(self):
 
         # genereate the transformers
-        self.transformer_to_utm    = Transformer.from_crs("EPSG:4326", "EPSG:28992")
-        self.transformer_to_latlon = Transformer.from_crs("EPSG:28992", "EPSG:4326")
+        self.transformer_to_utm    = Transformer.from_crs("EPSG:4326", "EPSG:32633")
+        self.transformer_to_latlon = Transformer.from_crs("EPSG:32633", "EPSG:4326")
 
         self.polygons_to_draw = []
         self.draw_the_polygons = False
@@ -167,7 +167,7 @@ class Clustering(core.Entity):
         x,y = self.transformer_to_utm.transform(bs.traf.lat, bs.traf.lon)
         # define a geoseries
         point_list = [Point(xp,yp) for xp,yp in zip(x,y)]
-        point_geoseries = gpd.GeoSeries(point_list, crs='EPSG:28992')
+        point_geoseries = gpd.GeoSeries(point_list, crs='EPSG:32633')
         
         # filter the conflict dictionary to remove items from more than observation time
         keys_to_remove = []
@@ -433,7 +433,7 @@ class Clustering(core.Entity):
                 self.polygons_to_draw.append((f'CLUSTER{optimal_label}', polygon))
 
         # create geodataframe of polygons
-        poly_gdf = gpd.GeoDataFrame(polygon_data, index=polygon_data['flow_group'], crs='EPSG:28992')
+        poly_gdf = gpd.GeoDataFrame(polygon_data, index=polygon_data['flow_group'], crs='EPSG:32633')
 
         # set the lavels as the index
         # # check for potential intersections

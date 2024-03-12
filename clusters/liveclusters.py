@@ -55,8 +55,8 @@ class Clustering(core.Entity):
         super().__init__() 
 
         # genereate the transformers
-        self.transformer_to_utm    = Transformer.from_crs("EPSG:4326", "EPSG:28992")
-        self.transformer_to_latlon = Transformer.from_crs("EPSG:28992", "EPSG:4326")
+        self.transformer_to_utm    = Transformer.from_crs("EPSG:4326", "EPSG:32633")
+        self.transformer_to_latlon = Transformer.from_crs("EPSG:32633", "EPSG:4326")
 
         self.polygons_to_draw = []
         self.draw_the_polygons = False
@@ -105,8 +105,8 @@ class Clustering(core.Entity):
     def reset(self):
 
         # genereate the transformers
-        self.transformer_to_utm    = Transformer.from_crs("EPSG:4326", "EPSG:28992")
-        self.transformer_to_latlon = Transformer.from_crs("EPSG:28992", "EPSG:4326")
+        self.transformer_to_utm    = Transformer.from_crs("EPSG:4326", "EPSG:32633")
+        self.transformer_to_latlon = Transformer.from_crs("EPSG:32633", "EPSG:4326")
 
         self.polygons_to_draw = []
         self.draw_the_polygons = False
@@ -424,7 +424,7 @@ class Clustering(core.Entity):
             #    self.polygons_to_draw.append((f'CLUSTER{optimal_label}', polygon))
 
         # create geodataframe of polygons
-        poly_gdf = gpd.GeoDataFrame(polygon_data, index=polygon_data['flow_group'], crs='EPSG:28992')
+        poly_gdf = gpd.GeoDataFrame(polygon_data, index=polygon_data['flow_group'], crs='EPSG:32633')
 
         
         return poly_gdf

@@ -30,7 +30,7 @@ def kwikqdrdist(lata, lona, latb, lonb):
     return qdr, dist
 
 # City we are using
-city = 'Rotterdam'
+city = 'Vienna'
 path = f'{city}'
 
 # Path requirements

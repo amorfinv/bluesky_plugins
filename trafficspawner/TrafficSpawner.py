@@ -36,7 +36,7 @@ class TrafficSpawner(Entity):
         super().__init__()
         self.target_ntraf = 100
         # Load default city
-        self.graph, self.original_graph, self.edges, self.nodes = self.loadcity('Rotterdam')
+        self.graph, self.original_graph, self.edges, self.nodes = self.loadcity('Vienna')
         # Traffic ID increment
         self.traf_id = 1
         #default alt and speed
@@ -87,7 +87,7 @@ class TrafficSpawner(Entity):
     def reset(self):
         self.target_ntraf = 100
         # Load default city
-        self.graph, self.original_graph, self.edges, self.nodes = self.loadcity('Rotterdam')
+        self.graph, self.original_graph, self.edges, self.nodes = self.loadcity('Vienna')
         # Traffic ID increment
         self.traf_id = 1
         #default alt and speed
@@ -153,9 +153,9 @@ class TrafficSpawner(Entity):
         G = ox.graph_from_gdfs(nodes, edges)
         G_original = deepcopy(G)
 
-        # convert both to CRS:28992
-        edges_transformed = edges.to_crs('EPSG:28992')
-        nodes_transformed = nodes.to_crs('EPSG:28992')
+        # convert both to CRS:32633
+        edges_transformed = edges.to_crs('EPSG:32633')
+        nodes_transformed = nodes.to_crs('EPSG:32633')
 
         # now add an edge length attribute
         #edges_transformed['length'] =  edges_transformed['geometry'].apply(lambda x: x.length)
