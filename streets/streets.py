@@ -202,7 +202,10 @@ class EdgesAp(Entity):
 
             edge_traffic.actedge.wpedgeid[i], edge_traffic.actedge.turn[i], \
             edge_traffic.actedge.intersection_lat[i] , edge_traffic.actedge.intersection_lon[i], \
-            edge_traffic.actedge.group_number[i], edge_traffic.actedge.flow_number[i] = self.edge_rou[i].getnextwp()      
+            edge_traffic.actedge.group_number[i], edge_traffic.actedge.flow_number[i] = self.edge_rou[i].getnextwp()
+
+            # log actual route taken
+            bs.traf.TrafficSpawner.travelled_route[i].append(edge_traffic.actedge.wpedgeid[i])
 
         # TODO: only calculate for drones that are in constrained airspace
         # get distance of drones to next intersection

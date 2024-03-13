@@ -60,11 +60,15 @@ class TrafficSpawner(Entity):
         self.deleted_aircraft = 0
         self.losmindist = dict()
         
+        self.planned_routes = dict()
+        
         with self.settrafarrays():
             self.route_edges = []
             self.unique_edges = []
             self.original_route = []
             self.route_nodes = []
+            self.travelled_route = []
+
             # Metrics
             self.distance2D = np.array([])
             self.distance3D = np.array([])
@@ -79,6 +83,8 @@ class TrafficSpawner(Entity):
         self.unique_edges[-n:] = [0]*n # Default edge
         self.original_route[-n:] = [0]*n
         self.route_nodes[-n:] = [0]*n
+        self.travelled_route[-n:] = [0]*n
+
         self.distance2D[-n:] = [0]*n
         self.distance3D[-n:] = [0]*n
         self.distancealt[-n:] = [0]*n
@@ -110,12 +116,17 @@ class TrafficSpawner(Entity):
         self.confinside_all = 0
         self.deleted_aircraft = 0
         self.losmindist = dict()
+
+        # get stuff for logging routes
+        self.planned_routes = dict()
         
         with self.settrafarrays():
             self.route_edges = []
             self.unique_edges = []
             self.original_route = []
             self.route_nodes = []
+            self.travelled_route = []
+
             # Metrics
             self.distance2D = np.array([])
             self.distance3D = np.array([])
@@ -243,6 +254,8 @@ class TrafficSpawner(Entity):
             unique_edges = list({f'{u}-{v}':None for u,v in edges}.keys())
             self.unique_edges[acidx] = np.array(unique_edges)
             self.original_route[acidx] = deepcopy(unique_edges)
+            self.planned_routes[acid] = []
+            self.travelled_route[acidx] = []
 
             # list of unique nodes
             seen = set()
@@ -315,6 +328,27 @@ class TrafficSpawner(Entity):
                     bs.traf.aporasas.tas[idx]/kts,
                     bs.traf.aporasas.vs[idx]/fpm,
                     bs.traf.aporasas.hdg[idx])
+                
+
+                # get original route
+                original_route = self.original_route[idx]
+                origin_node = original_route[0].split('-')[0]
+                destination_node = original_route[-1].split('-')[1]
+                original_route = [origin_node] + [edge.split('-')[1] for edge in original_route]
+                
+                # get route travelled
+                travelled_route = self.travelled_route[idx]
+                unique_travelled_edges = list({edge: None for edge in travelled_route}.keys())
+                travelled_route = [origin_node] + [edge.split('-')[0] for edge in unique_travelled_edges] + [destination_node]
+
+                # get planned routes
+                planned_routes = []
+                for route in self.planned_routes[acid]:
+                    first_node = route[0].split('-')[0]
+                    route = [first_node] + [edge.split('-')[1] for edge in route]
+                    planned_routes.append(route)
+
+            
                 stack.stack(f'DEL {acid}')
                 
         if (self.stop_time_enable and bs.sim.simt > self.stop_time) or \

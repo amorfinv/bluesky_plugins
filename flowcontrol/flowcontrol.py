@@ -31,6 +31,20 @@ flowheader = \
     'Number of replan resulting in shorter distance [-]' + \
     'Number of replans giving shortest path [-]\n'
 
+replanheader = \
+    '#######################################################\n' + \
+    'Cluster log LOG\n' + \
+    'Cluster density statistics\n' + \
+    '#######################################################\n\n' + \
+    'Parameters [Units]:\n' + \
+    'ACID [-], ' + \
+    'Original plan [-], ' + \
+    'Travelled plan [-], ' + \
+    'issame [-], ' + \
+    'n_replans [-], ' + \
+    'replans [-]\n'
+
+
 
 def init_plugin():
 
@@ -54,7 +68,8 @@ class FlowControl(core.Entity):
         self.replan_time_limit = 60
         self.enableflowcontrol = False
         self.flowlog = datalog.crelog('FLOWLOG', None, flowheader)
-        
+        self.replanlog = datalog.crelog('REPLANLOG', None, replanheader)
+
         # default replan ratio
         self.replan_ratio = 0.5
 
@@ -75,7 +90,8 @@ class FlowControl(core.Entity):
         self.replan_time_limit = 60
         self.enableflowcontrol = False
         self.flowlog = datalog.crelog('FLOWLOG', None, flowheader)
-        
+        self.replanlog = datalog.crelog('REPLANLOG', None, replanheader)
+
         # default replan ratio
         self.replan_ratio = 0.5
 
@@ -117,9 +133,9 @@ def do_flowcontrol():
     if not bs.traf.flowcontrol.enableflowcontrol:
         return
     
-    # start flow control at 10 mins
-    if bs.sim.simt <= 600:
-        return
+    # # start flow control at 10 mins
+    # if bs.sim.simt <= 600:
+    #     return
 
     # first apply some geovectors for aircraft
     apply_geovectors()
@@ -262,6 +278,9 @@ def replan(acid_to_replan):
         bs.traf.TrafficSpawner.route_edges[acidx] = edges
         unique_edges = list({edge: None for edge in edges}.keys())
         bs.traf.TrafficSpawner.unique_edges[acidx] = np.array(unique_edges)
+
+        # add this to the planned routes
+        bs.traf.TrafficSpawner.planned_routes[acid].append(deepcopy(unique_edges))
 
         # Start adding waypoints
         for edgeidx, lat, lon, turn in zip(edges, lats, lons, turns):
