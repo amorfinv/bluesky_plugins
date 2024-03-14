@@ -239,7 +239,7 @@ class TrafficSpawner(Entity):
             achdg, _ = kwikqdrdist(lats[0], lons[0], lats[1], lons[1])
             
             # Let's create the aircraft
-            bs.traf.cre(acid, actype, lats[0], lons[0], achdg, self.alt, 5)
+            bs.traf.cre(acid, actype, lats[0], lons[0], achdg, self.alt, 20*kts)
             
             # Get more info
             acrte = Route._routes.get(acid)
