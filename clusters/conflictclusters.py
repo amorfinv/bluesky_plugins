@@ -15,7 +15,7 @@ from bluesky import core
 from bluesky.tools import datalog
 from bluesky.tools.aero import nm
 from bluesky.tools import areafilter as af
-from bluesky.stack import command
+from bluesky.stack import command, stack
 from plugins.clusters import cluster_algorithms as calgos
 
 clusterheader = \
@@ -147,18 +147,20 @@ class Clustering(core.Entity):
         super().create(n)
         self.cluster_labels[-n:] = -1
 
-    @timed_function(dt=10)
     def delete_polygons(self):
         if not self.draw_the_polygons:
             return
         # first delete the areas from bluesky screen
-        for areaname, _ in self.polygons_to_draw:            
+        for areaname, *_ in self.polygons_to_draw:            
             af.deleteArea(areaname)
         
         self.polygons_to_draw = []
 
     @timed_function(dt=10)
     def clustering(self):
+
+        # delete polygons in screen
+        self.delete_polygons()
 
         if bs.traf.ntraf == 0:
            return
@@ -207,13 +209,11 @@ class Clustering(core.Entity):
         
         if polygons.empty:
             return
-        
-        # here check which aircraft fall within the polygons
-        self.aircraft_intersect(polygons, point_geoseries)
+    
 
         # now we want to find out which edges intersect with the polygons and update streets plugin
         # with the new flow group numbers
-        new_edges = self.edges_intersect(polygons)
+        new_edges, polygons = self.edges_intersect(polygons, point_geoseries)
 
         # calculate densities of the cluster areas
         polygons = self.calc_densities(polygons, new_edges)
@@ -223,6 +223,9 @@ class Clustering(core.Entity):
 
         # cluster logginf
         self.update_logging()
+
+        # draw the polygons
+        self.draw_polygons()
 
         # code to plot in matplotlib
         # self.external_plotting(features, optimal_labels)
@@ -283,6 +286,19 @@ class Clustering(core.Entity):
         # select indices of edges in the medium or high category
         selected_indices = merged_df[merged_df['density_category'].isin(['medium', 'high'])].index
         selected_indices = [f'{u}-{v}' for u,v,_ in selected_indices]
+
+        # save polygons to draw later
+        if self.draw_the_polygons:
+            polygon_colors = {'low': 'green', 'medium': 'blue', 'high': 'red'}
+            for polygon in polygons.itertuples():
+                
+                # if polygon.density_category == 'low':
+                #     continue
+                labels = polygon.flow_group
+                polygon_geom = polygon.geometry
+                polygon_color = polygon_colors[polygon.density_category]
+                
+                self.polygons_to_draw.append((f'CLUSTER{labels}', polygon_geom, polygon_color))
         
         return polygons, selected_indices
 
@@ -308,7 +324,7 @@ class Clustering(core.Entity):
 
         return polygons
     
-    def edges_intersect(self, polygons):
+    def edges_intersect(self, polygons, point_geoseries):
 
         # Check for intersections, Note this returns integer indices so use .iloc
         poly_intersection_indices, edge_intersection_indices = bs.traf.TrafficSpawner.edges.sindex.query_bulk(polygons['geometry'], predicate="intersects")
@@ -384,6 +400,22 @@ class Clustering(core.Entity):
         new_edges_df['flow_group'] = new_edges_df['flow_group'].astype(int)
         new_edges_df['length'] =  new_edges_df['geometry'].apply(lambda x: x.length)
 
+        # After checking if an edge is part of several polygons it may be possible that
+        # a polygon is left without any edges
+        check_assigned_flow_groups = np.sort(new_edges_df['flow_group'].unique())
+        check_assigned_flow_groups = check_assigned_flow_groups[1:]
+
+        get_polygon_flow_groups = np.array(polygons['flow_group'])
+
+        # check if there are any missing polygons in assigned flow groups
+        unassigned_groups = np.setdiff1d(get_polygon_flow_groups, check_assigned_flow_groups)
+
+        # remove value from polygons
+        polygons = polygons[~polygons['flow_group'].isin(unassigned_groups)]
+
+        # here check which aircraft fall within the polygons
+        self.aircraft_intersect(polygons, point_geoseries)
+
         # next step is to update the flow_number in the "streets" plugin.
         # update the edge_traffic dictionary
         for key, value in bs.traf.edgetraffic.edge_dict.items():
@@ -403,7 +435,7 @@ class Clustering(core.Entity):
             else:
                 bs.traf.edgetraffic.actedge.flow_number[idx] = -1
         
-        return new_edges_df
+        return new_edges_df, polygons
   
     def polygonize(self, optimal_labels, features, n_clusters, buffer_dist=bs.settings.asas_pzr*4):
         
@@ -428,10 +460,6 @@ class Clustering(core.Entity):
             polygon_data['geometry'].append(polygon)
             polygon_data['conf_count'].append(cluster_points.shape[0])
 
-            # save polygons to draw later
-            if self.draw_the_polygons:
-                self.polygons_to_draw.append((f'CLUSTER{optimal_label}', polygon))
-
         # create geodataframe of polygons
         poly_gdf = gpd.GeoDataFrame(polygon_data, index=polygon_data['flow_group'], crs='EPSG:28992')
 
@@ -443,16 +471,19 @@ class Clustering(core.Entity):
         
         return poly_gdf
 
-    @timed_function(dt=10)
     def draw_polygons(self):
 
         if not self.draw_the_polygons:
             return
+
         # draw the polygons
-        for areaname, polygon in self.polygons_to_draw:            
+        for areaname, polygon, colour in self.polygons_to_draw:            
             lat, lon = self.transformer_to_latlon.transform(*polygon.exterior.coords.xy)
             coordinates = [x for pair in zip(lat, lon) for x in pair]
             af.defineArea(areaname, 'POLY', coordinates)
+
+            # set the color
+            stack(f'COLOUR {areaname} {colour}')
 
     def external_plotting(self, features, optimal_labels):
         for _, polygon in self.polygons_to_draw: 
@@ -509,3 +540,9 @@ class Clustering(core.Entity):
         # set the cutoff
         self.low_density_cutoff = medium_density_cutoff
         self.medium_density_cutoff = high_density_cutoff
+
+    @command 
+    def DRAWPOLYGONS(self):
+        # set the cutoff
+        self.draw_the_polygons = True
+    
