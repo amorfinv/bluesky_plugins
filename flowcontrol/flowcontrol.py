@@ -37,6 +37,7 @@ replanheader = \
     'Cluster density statistics\n' + \
     '#######################################################\n\n' + \
     'Parameters [Units]:\n' + \
+    'Deletion time [s], ' + \
     'ACID [-], ' + \
     'Original plan [-], ' + \
     'Travelled plan [-], ' + \
@@ -124,6 +125,7 @@ class FlowControl(core.Entity):
     @stack.command 
     def STARTFLOWLOG(self):
         self.flowlog.start()
+        self.replanlog.start()
 
 ######################## FLOW CONTROL FUNCTIONS #########################
 
@@ -133,9 +135,9 @@ def do_flowcontrol():
     if not bs.traf.flowcontrol.enableflowcontrol:
         return
     
-    # # start flow control at 10 mins
-    # if bs.sim.simt <= 600:
-    #     return
+    # start flow control at 10 mins
+    if bs.sim.simt <= 600:
+        return
 
     # first apply some geovectors for aircraft
     apply_geovectors()

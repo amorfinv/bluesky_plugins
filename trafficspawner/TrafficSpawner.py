@@ -335,20 +335,62 @@ class TrafficSpawner(Entity):
                 origin_node = original_route[0].split('-')[0]
                 destination_node = original_route[-1].split('-')[1]
                 original_route = [origin_node] + [edge.split('-')[1] for edge in original_route]
-                
+                original_route = '-'.join(original_route)
+
                 # get route travelled
                 travelled_route = self.travelled_route[idx]
                 unique_travelled_edges = list({edge: None for edge in travelled_route}.keys())
-                travelled_route = [origin_node] + [edge.split('-')[0] for edge in unique_travelled_edges] + [destination_node]
+                travelled_route = [edge.split('-')[0] for edge in unique_travelled_edges]
+
+                # check if origin or destination node is part of list
+                if not travelled_route[0] == origin_node:
+                    travelled_route = [origin_node] + travelled_route
+
+                if not travelled_route[-1] == destination_node:
+                    travelled_route = travelled_route + [destination_node]
+
+                travelled_route = '-'.join(travelled_route)
+
+                # check if original is same as travelled
+                is_same_route = original_route == travelled_route
 
                 # get planned routes
-                planned_routes = []
-                for route in self.planned_routes[acid]:
-                    first_node = route[0].split('-')[0]
-                    route = [first_node] + [edge.split('-')[1] for edge in route]
-                    planned_routes.append(route)
 
-            
+                if len(self.planned_routes[acid]):
+                    planned_routes = []
+                    for route in self.planned_routes[acid]:
+                        first_node = route[0].split('-')[0]
+                        route = [first_node] + [edge.split('-')[1] for edge in route]
+                        route = '-'.join(route)
+                        planned_routes.append(route)
+
+                    n_replans = len(planned_routes)
+
+                    # now merge the routes    
+                    planned_routes = ','.join(planned_routes)
+                    
+                else:
+                    # make empty if no plans
+                    planned_routes = ''
+                    n_replans = 0
+
+                # add acid to data
+                original_route = f'{acid},' + original_route
+                travelled_route = f'{acid},' + travelled_route
+                is_same_route = f'{acid},{is_same_route}'
+                n_replans = f'{acid},{n_replans}'
+                planned_routes = f'{acid},' +  planned_routes
+
+                # log the information
+                bs.traf.flowcontrol.replanlog.log(original_route)
+                bs.traf.flowcontrol.replanlog.log(travelled_route)
+                bs.traf.flowcontrol.replanlog.log(is_same_route)
+                bs.traf.flowcontrol.replanlog.log(n_replans)
+                bs.traf.flowcontrol.replanlog.log(planned_routes)
+
+                # now delete from planned routes dictionary
+                del self.planned_routes[acid]
+
                 stack.stack(f'DEL {acid}')
                 
         if (self.stop_time_enable and bs.sim.simt > self.stop_time) or \
