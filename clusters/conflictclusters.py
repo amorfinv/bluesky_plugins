@@ -165,6 +165,9 @@ class Clustering(core.Entity):
         if bs.traf.ntraf == 0:
            return
         
+        if bs.sim.simt <= 600:
+           return
+        
         # First convert the aircraft positions to meters
         x,y = self.transformer_to_utm.transform(bs.traf.lat, bs.traf.lon)
         # define a geoseries
