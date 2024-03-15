@@ -260,6 +260,9 @@ class Clustering(core.Entity):
                                             bins=[float('-inf'), low_linear_density, medium_linear_density, float('inf')],
                                             labels=['low', 'medium', 'high'])
 
+        # apply easy quantiles
+        # polygons['density_category'] = pd.qcut(polygons['conf_linear_density'], q=[0, 0.25, 0.5, 1], labels=['low', 'medium', 'high'])
+
         # add these categories to the edges_df        
         merged_df = pd.merge(polygons, edges_df, left_index=True, right_on='flow_group', how='left')
 
@@ -437,7 +440,7 @@ class Clustering(core.Entity):
         
         return new_edges_df, polygons
   
-    def polygonize(self, optimal_labels, features, n_clusters, buffer_dist=bs.settings.asas_pzr*4):
+    def polygonize(self, optimal_labels, features, n_clusters, buffer_dist=bs.settings.asas_pzr):
         
         # loop through all of the clusters and create a polygon
         polygon_data = {'flow_group': [], 'geometry': [], 'conf_count': []}
