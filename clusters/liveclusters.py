@@ -419,13 +419,8 @@ class Clustering(core.Entity):
             polygon_data['flow_group'].append(optimal_label)
             polygon_data['geometry'].append(polygon)
 
-            # save polygons to draw later
-            #if self.draw_the_polygons:
-            #    self.polygons_to_draw.append((f'CLUSTER{optimal_label}', polygon))
-
         # create geodataframe of polygons
         poly_gdf = gpd.GeoDataFrame(polygon_data, index=polygon_data['flow_group'], crs='EPSG:28992')
-
         
         return poly_gdf
 
@@ -495,3 +490,8 @@ class Clustering(core.Entity):
         # set the cutoff
         self.low_density_cutoff = medium_density_cutoff
         self.medium_density_cutoff = high_density_cutoff
+
+    @command 
+    def DRAWPOLYGONS(self):
+        # set the cutoff
+        self.draw_the_polygons = True
