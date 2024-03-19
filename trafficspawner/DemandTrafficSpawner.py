@@ -26,18 +26,21 @@ def init_plugin():
         'reset': reset
     }
     # Put TrafficSpawner in bs.traf
-    bs.traf.TrafficSpawner = TrafficSpawner()
+    bs.traf.TrafficSpawner = DemandTrafficSpawner()
     return config
 
 def reset():
     bs.traf.TrafficSpawner.reset()
 
-class TrafficSpawner(Entity):
+class DemandTrafficSpawner(Entity):
     def __init__(self):
         super().__init__()
         self.target_ntraf = 100
         # Load default city
-        self.graph, self.original_graph, self.edges, self.nodes = self.loadcity('Rotterdam')
+        # destination probabilities
+        self.destination_osmids = []
+        self.destination_probabilities = []
+        self.graph, self.original_graph, self.edges, self.nodes, self.destination_osmids, self.destination_probabilities = self.loadcity('Rotterdam')
         # Traffic ID increment
         self.traf_id = 1
         #default alt and speed
@@ -62,10 +65,6 @@ class TrafficSpawner(Entity):
         self.losmindist = dict()
         
         self.planned_routes = dict()
-
-        # destination probabilities
-        self.destination_osmids = []
-        self.destination_probabilities = []
         
         with self.settrafarrays():
             self.route_edges = []
@@ -98,7 +97,8 @@ class TrafficSpawner(Entity):
     def reset(self):
         self.target_ntraf = 100
         # Load default city
-        self.graph, self.original_graph, self.edges, self.nodes = self.loadcity('Rotterdam')
+        # destination probabilities
+        self.graph, self.original_graph, self.edges, self.nodes, self.destination_osmids, self.destination_probabilities = self.loadcity('Rotterdam')
         # Traffic ID increment
         self.traf_id = 1
         #default alt and speed
@@ -125,9 +125,6 @@ class TrafficSpawner(Entity):
         # get stuff for logging routes
         self.planned_routes = dict()
 
-        # destination probabilities
-        self.destination_osmids = []
-        self.destination_probabilities = []
         
         with self.settrafarrays():
             self.route_edges = []
@@ -152,7 +149,7 @@ class TrafficSpawner(Entity):
             return
         self.city = city
         self.path = f'plugins/scenario_maker/{self.city}'
-        self.load_origins_destinations()
+        destination_osmids, destination_probabilities = self.load_origins_destinations()
         # Set the origin point of the city
         with open(f'{self.path}/centre.txt', 'r') as f:
             coords = f.readlines()
@@ -183,7 +180,7 @@ class TrafficSpawner(Entity):
         # force create spatial index
         edges_transformed.sindex
         
-        return G, G_original, edges_transformed, nodes_transformed
+        return G, G_original, edges_transformed, nodes_transformed, destination_osmids, destination_probabilities
     
     @command
     def trafficnumber(self, target_ntraf = 50):
@@ -224,12 +221,14 @@ class TrafficSpawner(Entity):
         # load the node probabilities
         node_demands = gpd.read_file(f'{self.path}/node_demands.gpkg')
 
-        self.destination_osmids = node_demands['osmid'].to_list()
-        self.destination_probabilities = node_demands['split_demand'].to_list()
+        destination_osmids = node_demands['osmid'].to_list()
+        destination_probabilities = node_demands['split_demand'].to_list()
 
         # sanity check ensure that node_demands destination match the pickle
         set_difference = set(self.destination_osmids) - set(destinations)
         assert len(set_difference) == 0
+
+        return  destination_osmids, destination_probabilities
     
     @timed_function(dt = 1)
     def spawn_traffic(self):
