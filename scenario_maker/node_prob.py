@@ -2,6 +2,7 @@ import geopandas as gpd
 import pandas as pd
 import numpy as np
 from copy import deepcopy
+from collections import defaultdict
 import pickle
 
 # open demand file
@@ -9,6 +10,7 @@ demand_polygons = gpd.read_file("Rotterdam/normalized_demand.gpkg")
 
 # open airspace polygon and get the airspace boundary
 nodes = gpd.read_file("Rotterdam/updated.gpkg", layer='nodes')
+nodes.set_index(['osmid'], inplace=True)
 nodes = nodes.to_crs(epsg='28992')
 
 # perform spatial join
@@ -58,6 +60,14 @@ nodes_join.loc[indices, 'new_demand'] = new_demands
 # load the origin and destination pickle
 with open('Rotterdam/orig_dest_dict.pickle', 'rb') as f:
     orig_dest_dict = pickle.load(f)
+
+flipped_dict = defaultdict(list)
+for key, values in orig_dest_dict.items():
+    for value in values:
+        flipped_dict[value].append(key)
+
+# get the destinations
+destinations = list(flipped_dict.keys())
 
 # get the origins
 origins = list(orig_dest_dict.keys())

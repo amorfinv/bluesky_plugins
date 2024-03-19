@@ -5,6 +5,7 @@ import os
 import pickle
 import random
 from copy import deepcopy
+from collections import defaultdict
 
 import bluesky as bs
 from bluesky.core import Entity, timed_function
@@ -61,6 +62,10 @@ class TrafficSpawner(Entity):
         self.losmindist = dict()
         
         self.planned_routes = dict()
+
+        # destination probabilities
+        self.destination_osmids = []
+        self.destination_probabilities = []
         
         with self.settrafarrays():
             self.route_edges = []
@@ -119,6 +124,10 @@ class TrafficSpawner(Entity):
 
         # get stuff for logging routes
         self.planned_routes = dict()
+
+        # destination probabilities
+        self.destination_osmids = []
+        self.destination_probabilities = []
         
         with self.settrafarrays():
             self.route_edges = []
@@ -199,7 +208,28 @@ class TrafficSpawner(Entity):
     def load_origins_destinations(self):
         with open(f'{self.path}/orig_dest_dict.pickle', 'rb') as f:
             self.orig_dest_dict = pickle.load(f)
-        return
+
+        # here we flip the dictionary
+        flipped_dict = defaultdict(list)
+        for key, values in self.orig_dest_dict.items():
+            for value in values:
+                flipped_dict[value].append(key)
+
+        # flipped dictionary with destinations as keys and origins as values
+        self.orig_dest_dict = flipped_dict
+
+        # destinations from pickle
+        destinations = list(self.orig_dest_dict.keys())
+
+        # load the node probabilities
+        node_demands = gpd.read_file(f'{self.path}/node_demands.gpkg')
+
+        self.destination_osmids = node_demands['osmid'].to_list()
+        self.destination_probabilities = node_demands['split_demand'].to_list()
+
+        # sanity check ensure that node_demands destination match the pickle
+        set_difference = set(self.destination_osmids) - set(destinations)
+        assert len(set_difference) == 0
     
     @timed_function(dt = 1)
     def spawn_traffic(self):
@@ -212,8 +242,8 @@ class TrafficSpawner(Entity):
 
         while bs.traf.ntraf < self.target_ntraf and attempts < 20:
             # Choose a random origin and destination
-            origin = random.choice(list(self.orig_dest_dict.keys()))
-            destination = random.choice(self.orig_dest_dict[origin])
+            destination = random.choices(self.destination_osmids, weights=self.destination_probabilities)[0]
+            origin = random.choice(self.orig_dest_dict[destination])
             # Load the pickle file for that
             with open(f'{self.path}/pickles/{origin}-{destination}.pkl', 'rb') as f:
                 pickled_route = pickle.load(f)
