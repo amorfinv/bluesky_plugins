@@ -142,7 +142,6 @@ class Clustering(core.Entity):
         with self.settrafarrays():
             self.cluster_labels = np.array([])
 
-
     def create(self, n=1):
         super().create(n)
         self.cluster_labels[-n:] = -1
@@ -213,7 +212,6 @@ class Clustering(core.Entity):
         if polygons.empty:
             return
     
-
         # now we want to find out which edges intersect with the polygons and update streets plugin
         # with the new flow group numbers
         new_edges, polygons = self.edges_intersect(polygons, point_geoseries)
@@ -250,7 +248,6 @@ class Clustering(core.Entity):
         
         self.cluster_labels[mask] = intersections_poly
         self.cluster_labels[~mask] = -1
-
 
     def apply_density_rules(self, polygons, edges_df):
 
