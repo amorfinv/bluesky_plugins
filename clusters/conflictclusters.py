@@ -427,7 +427,7 @@ class Clustering(core.Entity):
 
             # now we update the new series based on repeated polygons 
             # remove the duplicates
-            new_series = new_series[~new_series.index.duplicated(keep='first')] 
+            new_series = new_series[~new_series.index.duplicated(keep='first')]
 
             # assign correct value to the series
             for duplicate_edge, polygon_choice in selected_polygons.items():
