@@ -82,7 +82,15 @@ input_arr = []
 for origin in orig_nodes:
     for destination in dest_nodes:
         input_arr.append([origin, destination])
-        
+
+if city == 'simpletest':
+    # input_arr = [[22,46], [1847,1819]] # second path doesn't really change
+    input_arr = [[19,56], [1847,1819]]
+    input_arr = [[19,56], [1834,1826]]
+
+    min_dist = 5 # Metres
+
+
 # Function that creates the route pickle
 def make_route_pickle(inp):
     '''Creates a route pickle. 

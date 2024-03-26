@@ -307,9 +307,12 @@ class Clustering(core.Entity):
         return polygons, selected_indices
     
     def apply_density_rules_easy(self, polygons, edges_df):
-   
-        # apply easy quantiles
-        polygons['density_category'] = pd.qcut(polygons['conf_linear_density'], q=[0, 0.25, 0.5, 1], labels=['low', 'medium', 'high'])
+
+        if len(polygons) == 1:
+            polygons['density_category'] = 'high'
+        else:
+            # apply easy quantiles
+            polygons['density_category'] = pd.qcut(polygons['conf_linear_density'], q=[0, 0.25, 0.5, 1], labels=['low', 'medium', 'high'])
 
         # add these categories to the edges_df        
         merged_df = pd.merge(polygons, edges_df, left_index=True, right_on='flow_group', how='left')
