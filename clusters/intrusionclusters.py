@@ -309,7 +309,7 @@ class Clustering(core.Entity):
             polygons['density_category'] = 'high'
         else:
             # apply easy quantiles
-            polygons['density_category'] = pd.qcut(polygons['conf_linear_density'], q=[0, 0.25, 0.5, 1], labels=['low', 'medium', 'high'])
+            polygons['density_category'] = pd.qcut(polygons['los_linear_density'], q=[0, 0.25, 0.5, 1], labels=['low', 'medium', 'high'])
 
         # add these categories to the edges_df        
         merged_df = pd.merge(polygons, edges_df, left_index=True, right_on='flow_group', how='left')
