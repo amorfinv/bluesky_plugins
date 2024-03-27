@@ -186,7 +186,7 @@ def make_route_pickle(inp):
         # Return to not create a pickle if path is too short.
         return
         
-    with open(f'{path}/pickles/{orig_node}-{dest_node}.pkl' , 'wb') as f:
+    with open(f'{path}/pickles_demand/{orig_node}-{dest_node}.pkl' , 'wb') as f:
         pickle.dump(route_pickle, f)
     return route_pickle
 
@@ -201,7 +201,7 @@ if __name__ == '__main__':
     main()
 
 orig_dest_dict = dict()
-files_that_exist = os.listdir(f'{path}/pickles')
+files_that_exist = os.listdir(f'{path}/pickles_demand')
 for filename in files_that_exist:
     # If pkl not in file, skip
     if 'pkl' not in filename:
