@@ -203,7 +203,7 @@ class DemandTrafficSpawner(Entity):
         self.stop_time_enable = False
     
     def load_origins_destinations(self):
-        with open(f'{self.path}/orig_dest_dict.pickle', 'rb') as f:
+        with open(f'{self.path}/orig_dest_dict_demand.pickle', 'rb') as f:
             self.orig_dest_dict = pickle.load(f)
 
         # here we flip the dictionary
@@ -244,7 +244,7 @@ class DemandTrafficSpawner(Entity):
             destination = random.choices(self.destination_osmids, weights=self.destination_probabilities)[0]
             origin = random.choice(self.orig_dest_dict[destination])
             # Load the pickle file for that
-            with open(f'{self.path}/pickles/{origin}-{destination}.pkl', 'rb') as f:
+            with open(f'{self.path}/pickles_demand/{origin}-{destination}.pkl', 'rb') as f:
                 pickled_route = pickle.load(f)
                 
             # This pickle route has LAT, LON, EDGE, TURN. Unpack em
