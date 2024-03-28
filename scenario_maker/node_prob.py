@@ -75,6 +75,17 @@ origins = list(orig_dest_dict.keys())
 # remove them from node_gdf
 nodes_join = nodes_join.drop(origins, axis=0)
 
+# read in water polygons
+water_polygons = gpd.read_file("Rotterdam/water_rotterdam.gpkg")
+water_polygons = gpd.GeoDataFrame(water_polygons['geometry'], crs='28992')
+nodes_utm = deepcopy(nodes).to_crs(epsg='28992')
+intersection_with_water = gpd.sjoin(nodes_utm, water_polygons, how="left", predicate="intersects")
+intersection_with_water = intersection_with_water.dropna().index.to_list()
+
+
+# drop intersection with water nodes
+nodes_join = nodes_join.drop(intersection_with_water, axis=0)
+
 
 #  ok now we create a new column to give actual probability without origins
 # we do this by dividing the normalized_demand with the number of nodes with that demand
