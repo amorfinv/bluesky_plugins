@@ -58,7 +58,7 @@ nodes_join.loc[indices, 'new_demand'] = new_demands
 
 
 # load the origin and destination pickle
-with open('Rotterdam/orig_dest_dict.pickle', 'rb') as f:
+with open('Rotterdam/orig_dest_dict_demand.pickle', 'rb') as f:
     orig_dest_dict = pickle.load(f)
 
 flipped_dict = defaultdict(list)
