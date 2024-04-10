@@ -288,8 +288,26 @@ class Clustering(core.Entity):
 
     def apply_density_rules_easy(self, polygons, edges_df):
         
+        # when there are two clusters or less, just use high category
         if len(polygons) == 1:
             polygons['density_category'] = 'high'
+
+      # when there are two use 1 low and 1 high
+        elif len(polygons) == 2:
+            polygons['density_category'] = polygons['ac_linear_density'].apply(lambda x: 'low' if x == polygons['ac_linear_density'].min() else 'high')
+        
+
+        # when there are three use 1 medium and 2 high
+        elif len(polygons) == 3:
+            # Identify the minimum, median, and maximum density values
+            min_density = polygons['ac_linear_density'].min()
+            median_density = polygons['ac_linear_density'].median()
+            max_density = polygons['ac_linear_density'].max()
+
+            # Assign labels based on density comparisons using np.where
+            polygons['density_category'] = np.where(polygons['ac_linear_density'] == min_density, 'low',
+                                                    np.where(polygons['ac_linear_density'] == median_density, 'medium', 'high'))
+
         else:
             # apply easy quantiles
             polygons['density_category'] = pd.qcut(polygons['ac_linear_density'], q=[0, 0.25, 0.5, 1], labels=['low', 'medium', 'high'])
