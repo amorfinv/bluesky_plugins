@@ -35,6 +35,7 @@ class SyntheticTrafficSpawner(Entity):
     def __init__(self):
         super().__init__()
         self.target_ntraf = 100
+        self.synthetic_zone = 2
         # Load default city
         self.graph, self.original_graph, self.edges, self.nodes = self.loadcity('synthetic')
         # Traffic ID increment
@@ -96,6 +97,7 @@ class SyntheticTrafficSpawner(Entity):
         self.mission_type[-n:] = ''
     
     def reset(self):
+        self.synthetic_zone = 2
         self.target_ntraf = 100
         # Load default city
         self.graph, self.original_graph, self.edges, self.nodes = self.loadcity('synthetic')
@@ -125,6 +127,7 @@ class SyntheticTrafficSpawner(Entity):
         # get stuff for logging routes
         self.planned_routes = dict()
         
+
         with self.settrafarrays():
             self.route_edges = []
             self.unique_edges = []
@@ -205,11 +208,14 @@ class SyntheticTrafficSpawner(Entity):
         self.stop_time_enable = False
     
     def load_origins_destinations(self):
-        with open(f'{self.path}/orig_dest_dict_zone1.pickle', 'rb') as f:
+        with open(f'{self.path}/orig_dest_dict_zone{self.synthetic_zone}.pickle', 'rb') as f:
             self.orig_dest_dict = pickle.load(f)
     
     @timed_function(dt = 1)
-    def spawn_traffic(self):
+    def spawn_traffic_zone1(self):
+
+        if not self.synthetic_zone == 1:
+            return
         # load edge traffic for use
         # TODO: check for potential replans
         streets = pluginutils.access_plugin_object('streets')
@@ -222,7 +228,7 @@ class SyntheticTrafficSpawner(Entity):
             origin = random.choice(list(self.orig_dest_dict.keys()))
             destination = random.choice(self.orig_dest_dict[origin])
             # Load the pickle file for that
-            with open(f'{self.path}/pickles/conflictzone1/{origin}-{destination}.pkl', 'rb') as f:
+            with open(f'{self.path}/pickles/conflictzone{self.synthetic_zone}/{origin}-{destination}.pkl', 'rb') as f:
                 pickled_route = pickle.load(f)
                 
             # This pickle route has LAT, LON, EDGE, TURN. Unpack em
@@ -302,7 +308,10 @@ class SyntheticTrafficSpawner(Entity):
             self.mission_type[acidx] = 'clusterzone'
 
     @timed_function(dt = 30)
-    def spawn_through_traffic(self):
+    def spawn_through_traffic_zone_1(self):
+
+        if not self.synthetic_zone == 1:
+                return
         # load edge traffic for use
         # TODO: check for potential replans
         streets = pluginutils.access_plugin_object('streets')
@@ -317,7 +326,7 @@ class SyntheticTrafficSpawner(Entity):
         origin, destination = 83, 1819
 
         # Load the pickle file for that
-        with open(f'{self.path}/pickles/pathszone1/{origin}-{destination}.pkl', 'rb') as f:
+        with open(f'{self.path}/pickles/pathszone{self.synthetic_zone}/{origin}-{destination}.pkl', 'rb') as f:
             pickled_route = pickle.load(f)
             
         # This pickle route has LAT, LON, EDGE, TURN. Unpack em
@@ -384,6 +393,109 @@ class SyntheticTrafficSpawner(Entity):
         self.create_time[acidx] = bs.sim.simt
         
         self.mission_type[acidx] = 'regular'
+
+
+    @timed_function(dt = 1)
+    def spawn_traffic_zone2(self):
+
+        if not self.synthetic_zone == 2:
+            return
+        
+        # load edge traffic for use
+        # TODO: check for potential replans
+        streets = pluginutils.access_plugin_object('streets')
+        
+        '''Function to spawn traffic to maintain a traffic level equal to ntraf.'''
+
+        # Choose a random origin and destination
+        # origin = 16
+        # destination = 1495
+
+        # # origin, destination = 758, 1988
+        # origin, destination = 83, 1819
+
+        paths = [
+            (1837, 1576, 'conflictzone2'), 
+            (19, 56, 'pathszone2')
+                 ]
+        
+        for origin, destination, mission_type in paths:
+            # Load the pickle file for that
+            with open(f'{self.path}/pickles/{mission_type}/{origin}-{destination}.pkl', 'rb') as f:
+                pickled_route = pickle.load(f)
+                
+            # This pickle route has LAT, LON, EDGE, TURN. Unpack em
+            lats, lons, edges, turns = list(zip(*pickled_route))
+            # Check if any other aircraft is too close to the origin
+
+            dist = kwikdist_matrix(np.array([lats[0]]), np.array([lons[0]]), bs.traf.lat, bs.traf.lon)
+
+            # Second check, if distance is smaller than rpz * 4?
+            if np.any(dist<(bs.settings.asas_pzr*3)):
+                # Try again with another random aircraft
+                continue
+            
+            
+            # Obtain required data for aircraft
+            acid = f'D{self.traf_id}'
+            self.traf_id += 1
+            actype = 'M600'
+            achdg, _ = kwikqdrdist(lats[0], lons[0], lats[1], lons[1])
+            
+            # Let's create the aircraft
+            bs.traf.cre(acid, actype, lats[0], lons[0], achdg, self.alt, 20*kts)
+            
+            # Get more info
+            acrte = Route._routes.get(acid)
+            acidx = bs.traf.id.index(acid)
+            
+            # Add the edges to this guy
+            self.route_edges[acidx] = edges
+
+            # now create a unique edges dictionary. Doint in this weird manner so that
+            # I am able to persever order
+            # TODO: maybe use stroke groups
+            unique_edges = list({f'{u}-{v}':None for u,v in edges}.keys())
+            self.unique_edges[acidx] = np.array(unique_edges)
+            self.original_route[acidx] = deepcopy(unique_edges)
+            self.planned_routes[acid] = []
+            self.travelled_route[acidx] = []
+
+            # list of unique nodes
+            seen = set()
+            seen_add = seen.add
+            self.route_nodes[acidx] = [edge[0] for edge in edges if not (edge[0] in seen or seen_add(edge[0]))]
+            self.route_nodes[acidx].append(edges[-1][1])
+
+            # Start adding waypoints
+            for edgeid, lat, lon, turn in zip(edges, lats, lons, turns):
+                if turn:
+                    acrte.turnspd = 5 * kts
+                    acrte.swflyby = False
+                    acrte.swflyturn = True
+                else:
+                    acrte.swflyby = True
+                    acrte.swflyturn = False
+                    
+                wptype  = Route.wplatlon
+                acrte.addwpt_simple(acidx, acid, wptype, lat, lon, self.alt, self.spd)
+
+                # Add the streets stuff
+                edgeidx = '-'.join(map(str, edgeid))
+
+                streets.edge_traffic.edgeap.edge_rou[acidx].addwpt(acidx, acid, edgeidx, turn)
+            
+            # Calculate the flight plan
+            acrte.calcfp()
+            streets.edge_traffic.edgeap.edge_rou[acidx].direct(acidx,streets.edge_traffic.edgeap.edge_rou[acidx].wpname[1])
+
+            # Turn lnav on for this aircraft
+            stack.stack(f'LNAV {acid} ON')
+            stack.stack(f'VNAV {acid} ON')
+            # save the create time
+            self.create_time[acidx] = bs.sim.simt
+            
+            self.mission_type[acidx] = mission_type
 
     
     @timed_function(dt = bs.sim.simdt)

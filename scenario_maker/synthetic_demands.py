@@ -88,13 +88,14 @@ dest_nodes_new = []
 
 # Make the input array by combining all origin nodes with destination nodes
 input_arr = []
-for origin in orig_nodes:
-    for destination in dest_nodes:
-        input_arr.append([origin, destination])
+# for origin in orig_nodes:
+#     for destination in dest_nodes:
+#         input_arr.append([origin, destination])
 
 
 # add some flights through airspace
-# input_arr.append([83, 1819])
+input_arr.append([1837, 1576])
+input_arr.append([19, 56])
 
 # Function that creates the route pickle
 def make_route_pickle(inp):
@@ -108,7 +109,7 @@ def make_route_pickle(inp):
     orig_node, dest_node = inp
     
     # Check if file already exists
-    if exists(f'{path}/pickles/conflictzone1/{orig_node}-{dest_node}.pkl'):
+    if exists(f'{path}/pickles/conflictzone2/{orig_node}-{dest_node}.pkl'):
         return
     
     # Compute distance between the two waypoints
@@ -173,7 +174,7 @@ def make_route_pickle(inp):
         # Return to not create a pickle if path is too short.
         return
         
-    with open(f'{path}/pickles/conflictzone1/{orig_node}-{dest_node}.pkl' , 'wb') as f:
+    with open(f'{path}/pickles/conflictzone2/{orig_node}-{dest_node}.pkl' , 'wb') as f:
         pickle.dump(route_pickle, f)
     return route_pickle
 
@@ -188,7 +189,7 @@ if __name__ == '__main__':
     main()
 
 orig_dest_dict = dict()
-files_that_exist = os.listdir(f'{path}/pickles/conflictzone1')
+files_that_exist = os.listdir(f'{path}/pickles/conflictzone2')
 for filename in files_that_exist:
     # If pkl not in file, skip
     if 'pkl' not in filename:
@@ -203,6 +204,6 @@ for filename in files_that_exist:
     orig_dest_dict[orig].append(dest)
 
 # Save orig_nodes and dest_nodes to a file
-with open(f'{path}/orig_dest_dict_zone1.pickle', 'wb') as f:
+with open(f'{path}/orig_dest_dict_zone2.pickle', 'wb') as f:
     pickle.dump(orig_dest_dict, f)
 
