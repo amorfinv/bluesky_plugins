@@ -206,6 +206,10 @@ class SyntheticTrafficSpawner(Entity):
         self.stop_conf = int(confno)
         self.stop_conf_enable = True
         self.stop_time_enable = False
+
+    @command
+    def SYNSCN(self, syntheticnumber:float):
+        self.synthetic_zone = syntheticnumber
     
     def load_origins_destinations(self):
         with open(f'{self.path}/orig_dest_dict_zone{self.synthetic_zone}.pickle', 'rb') as f:
@@ -484,7 +488,7 @@ class SyntheticTrafficSpawner(Entity):
                 edgeidx = '-'.join(map(str, edgeid))
 
                 streets.edge_traffic.edgeap.edge_rou[acidx].addwpt(acidx, acid, edgeidx, turn)
-            
+
             # Calculate the flight plan
             acrte.calcfp()
             streets.edge_traffic.edgeap.edge_rou[acidx].direct(acidx,streets.edge_traffic.edgeap.edge_rou[acidx].wpname[1])
