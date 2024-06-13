@@ -412,15 +412,6 @@ class SyntheticTrafficSpawner(Entity):
         # TODO: check for potential replans
         streets = pluginutils.access_plugin_object('streets')
         
-        '''Function to spawn traffic to maintain a traffic level equal to ntraf.'''
-
-        # Choose a random origin and destination
-        # origin = 16
-        # destination = 1495
-
-        # # origin, destination = 758, 1988
-        # origin, destination = 83, 1819
-
         paths = [
             (1837, 1576, 'conflictzone2'), 
             (19, 56, 'pathszone2')
