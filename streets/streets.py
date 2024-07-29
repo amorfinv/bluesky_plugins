@@ -173,9 +173,7 @@ class EdgesAp(Entity):
 
         with self.settrafarrays():
             self.edge_rou = []
-        
-        # make a vectorized function to check speed limits
-        self.update_speed_limits = np.vectorize(self.check_speed_limits)
+
     
     def create(self, n=1):
         super().create(n)
@@ -204,6 +202,11 @@ class EdgesAp(Entity):
             edge_traffic.actedge.intersection_lat[i] , edge_traffic.actedge.intersection_lon[i], \
             edge_traffic.actedge.group_number[i], edge_traffic.actedge.flow_number[i] = self.edge_rou[i].getnextwp()
 
+            # check speed limit for this edge
+            u,v = edge_traffic.actedge.wpedgeid[i].split('-')
+            speed_limit = bs.traf.TrafficSpawner.graph.get_edge_data(int(u), int(v), 0)['speed_limit']
+            edge_traffic.actedge.speed_limit[i] = speed_limit
+
             # log actual route taken
             bs.traf.TrafficSpawner.travelled_route[i].append(edge_traffic.actedge.wpedgeid[i])
 
@@ -212,28 +215,16 @@ class EdgesAp(Entity):
         dis_to_int = geo.kwikdist_matrix(traf.lat, traf.lon, 
                                                     edge_traffic.actedge.intersection_lat, 
                                                     edge_traffic.actedge.intersection_lon)
-        # # check for speed limit changes
-        if bs.traf.ntraf > 0:
-            edge_traffic.actedge.speed_limit = self.update_speed_limits(edge_traffic.actedge.wpedgeid, 
-                                                                        bs.traf.type)
+        
         # flatten numpy arrays
         edge_traffic.actedge.dis_to_int = np.asarray(dis_to_int).flatten()
 
+        # print(edge_traffic.actedge.speed_limit)
+        # print(bs.traf.selspd)
+        # print('---------')
+
         return
 
-    @staticmethod
-    def check_speed_limits(wpedgeid, ac_type):
-
-        # check for speed limit changes
-        speed_limit = int(edge_traffic.edge_dict[wpedgeid]['speed_limit'])
-
-        # get aircraft cruise speed from last two values of ac_type
-        cruise_speed = int(ac_type[-2:])
-
-        # choose the minimum of the two for the new speed limit
-        speed_limit = min(speed_limit, cruise_speed)*kts
-
-        return speed_limit
 
 # active edge class "the active waypoint"
 class ActiveEdge(Entity):
@@ -257,7 +248,7 @@ class ActiveEdge(Entity):
             self.flow_number = np.array([], dtype=int)
 
             # speed limit
-            self.speed_limit = np.array([], dtype=np.int32)
+            self.speed_limit = np.array([], dtype=float)
 
     
     def create(self, n=1):
@@ -275,7 +266,7 @@ class ActiveEdge(Entity):
         self.group_number[-n:]              = 999
         self.flow_number[-n:]               = 999
 
-        self.speed_limit[-n:]               = 999
+        self.speed_limit[-n:]               = 20*kts
 
 # route_edge class. keeps track of when aircraft move to new edges and adds edges to stack
 class Route_edge(Replaceable):
