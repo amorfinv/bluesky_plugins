@@ -1,4 +1,5 @@
 import numpy as np
+import networkx as nx
 import osmnx as ox
 from itertools import groupby
 from copy import copy, deepcopy
@@ -30,18 +31,36 @@ flowheader = \
     'Number of replan resulting in shorter distance [-]' + \
     'Number of replans giving shortest path [-]\n'
 
+replanheader = \
+    '#######################################################\n' + \
+    'Cluster log LOG\n' + \
+    'Cluster density statistics\n' + \
+    '#######################################################\n\n' + \
+    'Parameters [Units]:\n' + \
+    'Deletion time [s], ' + \
+    'ACID [-], ' + \
+    'Original plan [-], ' + \
+    'Travelled plan [-], ' + \
+    'issame [-], ' + \
+    'n_replans [-], ' + \
+    'replans [-]\n'
+
+
 
 def init_plugin():
 
     bs.traf.flowcontrol = FlowControl()
 
     config = {
-        'plugin_name'      : 'randomflowcontrol',
+        'plugin_name'      : 'flowcontrol',
         'plugin_type'      : 'sim',
-        'reset'            : bs.traf.flowcontrol.reset()
+        'reset'            : reset
         }
     
     return config
+
+def reset():
+    bs.traf.flowcontrol.reset()
 
 class FlowControl(core.Entity):
     def __init__(self):
@@ -50,68 +69,63 @@ class FlowControl(core.Entity):
         self.replan_time_limit = 60
         self.enableflowcontrol = False
         self.flowlog = datalog.crelog('FLOWLOG', None, flowheader)
-        
+        self.replanlog = datalog.crelog('REPLANLOG', None, replanheader)
+
         # default replan ratio
         self.replan_ratio = 0.5
-        self.replan_probabilities = [self.replan_ratio, 1-self.replan_ratio]
 
-        # ratio of aircraft that can replan every 10 seconds 8%
-        self.replan_limit = 0.08
-
-        # make a new random generator for the shuffling process
-        self.flowrng = np.random.default_rng(1)
-        self.ac_replan_rng = np.random.default_rng(1)
+        # create the replan seeds
+        self.replan_rng = np.random.default_rng()
 
         with self.settrafarrays():
             self.last_replan = np.array([])
+            self.can_replan = np.array([])
 
+  
     def create(self, n=1):
         super().create(n)
         self.last_replan[-n:] = -99999
+
+    def reset(self):
+        
+        self.replan_time_limit = 60
+        self.enableflowcontrol = False
+        self.flowlog = datalog.crelog('FLOWLOG', None, flowheader)
+        self.replanlog = datalog.crelog('REPLANLOG', None, replanheader)
+
+        # default replan ratio
+        self.replan_ratio = 0.5
+
+        # create the replan seeds
+        self.ac_replan_rng = np.random.default_rng()
+        
+        # initialize the numpy random seed
+        with self.settrafarrays():
+            self.last_replan = np.array([])
+            self.can_replan = np.array([])
 
     @stack.command 
     def ENABLEFLOWCONTROL(self):
         self.enableflowcontrol = True
     
     @stack.command 
-    def REPLANLIMIT(self, replanlimit:int):
-        self.replanlimit = replanlimit
+    def REPLANLIMIT(self, replan_time_limit:int):
+        self.replan_time_limit = replan_time_limit
 
     @stack.command
     def REPLANRATIO(self, replanratio:float):
         # this sets the ratio of aircraft that can replan
-        # number between 0 and 1.
         self.replan_ratio = replanratio
-        self.replan_probabilities = [self.replan_ratio, 1-self.replan_ratio]
+
+    @stack.command
+    def FLOWSEED(self, flowseed:int):
+        # this sets the ratio of aircraft that can replan
+        self.ac_replan_rng = np.random.default_rng(flowseed)
 
     @stack.command 
     def STARTFLOWLOG(self):
         self.flowlog.start()
-
-    @stack.command 
-    def FLOWSEED(self, seed:int):
-        self.ac_replan_rng = np.random.default_rng(seed)
-        self.flowrng = np.random.default_rng(seed+2)
-
-    def reset(self):
-
-        self.replan_time_limit = 60
-        self.enableflowcontrol = False
-        self.flowlog = datalog.crelog('FLOWLOG', None, flowheader)
-        
-        # default replan ratio
-        self.replan_ratio = 0.5
-        self.replan_probabilities = [self.replan_ratio, 1-self.replan_ratio]
-
-        # ratio of aircraft that can replan every 10 seconds 8%
-        self.replan_limit = 0.08
-
-        # make a new random generator for the shuffling process and replan
-        self.flowrng = np.random.default_rng(1)
-        self.ac_replan_rng = np.random.default_rng(1)
-
-        with self.settrafarrays():
-            self.last_replan = np.array([])
+        self.replanlog.start()
 
 ######################## FLOW CONTROL FUNCTIONS #########################
 
@@ -120,13 +134,17 @@ def do_flowcontrol():
 
     if not bs.traf.flowcontrol.enableflowcontrol:
         return
-        
+    
+    # start flow control at 10 mins
+    if bs.sim.simt <= 600:
+        return
+
     # first apply some geovectors for aircraft
     apply_geovectors()
 
     # select which aircraft need to replan
     acid_to_replan = aircraft_to_replan()
-    
+
     # replan the planns
     attempted_replans, succesful_replans, close_turn_replans, longer_replans_old, shorter_replans_old, shortest_path_replan = replan(acid_to_replan)
 
@@ -136,7 +154,6 @@ def do_flowcontrol():
 def apply_geovectors():
     pass
 
-
 def aircraft_to_replan():
     
     # TODO: choose stroke groups to check replan
@@ -144,9 +161,8 @@ def aircraft_to_replan():
     # select which aircraft should replan
 
     acid_to_replan = []
-
     for acidx, acid in enumerate(bs.traf.id):
-        
+
         # First check that the current aircraft has not done a replan 
         # within the self.replan time limit
         replan_time = bs.sim.simt - bs.traf.flowcontrol.last_replan[acidx]
@@ -160,23 +176,18 @@ def aircraft_to_replan():
         # check if number is less than the replan ratio
         if not replan_probability <= bs.traf.flowcontrol.replan_ratio:
             continue
-
+            
         # if aircraft has not done a replan recently then we get their unique travel edges
         unique_edges = bs.traf.TrafficSpawner.unique_edges[acidx]
 
         # now check if the unique edges are part of the edges that need a replan
         if not np.any(np.isin(unique_edges,bs.traf.clustering.cluster_edges)):
             continue
-        
-        # allow an aircraft to replan potentially
+
+        # if it passes this step then we replan
         acid_to_replan.append((acid, acidx))
 
-    # here shuffle the acid to replan
-    if len(acid_to_replan):
-        bs.traf.flowcontrol.flowrng.shuffle(acid_to_replan)    
-
     return acid_to_replan
-
 
 def replan(acid_to_replan):
     # start replanning
@@ -190,11 +201,6 @@ def replan(acid_to_replan):
     shortest_path_replan = 0
 
     for acid, acidx in acid_to_replan:
-
-        # here check if we have reached the replan limit and break if we have reached
-        # limit
-        if succesful_replans/bs.traf.ntraf > bs.traf.flowcontrol.replan_limit:
-            break
 
         # step 1 get current edge of travel
         current_edgeid = bs.traf.edgetraffic.actedge.wpedgeid[acidx]
@@ -274,6 +280,9 @@ def replan(acid_to_replan):
         bs.traf.TrafficSpawner.route_edges[acidx] = edges
         unique_edges = list({edge: None for edge in edges}.keys())
         bs.traf.TrafficSpawner.unique_edges[acidx] = np.array(unique_edges)
+
+        # add this to the planned routes
+        bs.traf.TrafficSpawner.planned_routes[acid].append(deepcopy(unique_edges))
 
         # Start adding waypoints
         for edgeidx, lat, lon, turn in zip(edges, lats, lons, turns):
