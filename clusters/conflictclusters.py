@@ -141,7 +141,7 @@ class Clustering(core.Entity):
         
         self.polygons_to_draw = []
 
-    @timed_function(dt=60)
+    @timed_function(dt=10)
     def clustering(self):
 
         # delete polygons in screen

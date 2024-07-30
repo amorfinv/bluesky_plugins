@@ -82,6 +82,7 @@ class FlowControl(core.Entity):
 
     def reset(self):
         
+        self.geovector_time_limit = 60
         self.enableflowcontrol = False
         self.flowlog = datalog.crelog('FLOWLOG', None, flowheader)
         
@@ -97,6 +98,10 @@ class FlowControl(core.Entity):
     def STARTFLOWLOG(self):
         self.flowlog.start()
 
+    @stack.command 
+    def GEOTIME(self, geotime:int):
+        self.geovector_time_limit = geotime
+
 ######################## FLOW CONTROL FUNCTIONS #########################
 
 @core.timed_function(dt=bs.sim.simdt)
@@ -105,9 +110,11 @@ def do_flowcontrol():
     if not bs.traf.flowcontrol.enableflowcontrol:
         return
     
-    # # start flow control at 10 mins
-    # if bs.sim.simt <= 600:
-    #     return
+    # only run on multiples of geovector time limit
+    if not bs.sim.simt % bs.traf.flowcontrol.geovector_time_limit:
+        return
+    
+    print(bs.sim.simt)
 
     # first apply some geovectors for aircraft
     apply_geovectors()
