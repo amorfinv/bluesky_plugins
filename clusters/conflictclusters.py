@@ -83,13 +83,6 @@ class Clustering(core.Entity):
         self.medium_density_weight = 1.5
         self.high_density_weight = 2.0
 
-        # load the density dictionary
-        with open(f'{bs.settings.plugin_path}/clusters/densityjsons/conflicttraffic.json', 'r') as file:
-            # Load the JSON data into a dictionary
-            self.density_dictionary = json.load(file)
-
-        self.scen_density_dict = {}
-
         # set the density cutoff
         self.low_density_cutoff = '0.25'
         self.medium_density_cutoff = '0.50'
@@ -128,12 +121,6 @@ class Clustering(core.Entity):
         self.medium_density_weight = 1.5
         self.high_density_weight = 2.0
 
-        # load the density dictionary
-        with open(f'{bs.settings.plugin_path}/clusters/densityjsons/conflicttraffic.json', 'r') as file:
-            # Load the JSON data into a dictionary
-            self.density_dictionary = json.load(file)
-
-        self.scen_density_dict = {}
         
         # set the density cutoff
         self.low_density_cutoff = '0.25'
@@ -220,8 +207,7 @@ class Clustering(core.Entity):
         polygons = self.calc_densities(polygons, new_edges)
 
         # TODO: apply flow control rules so not all clusters need to replan
-        # self.cluster_polygons, self.cluster_edges = self.apply_density_rules(polygons, new_edges)
-        self.cluster_polygons, self.cluster_edges = self.apply_density_rules_easy(polygons, new_edges)
+        self.cluster_polygons, self.cluster_edges = self.apply_density_rules(polygons, new_edges)
 
         # cluster logginf
         self.update_logging()
@@ -248,62 +234,8 @@ class Clustering(core.Entity):
         
         self.cluster_labels[mask] = intersections_poly
         self.cluster_labels[~mask] = -1
-
+ 
     def apply_density_rules(self, polygons, edges_df):
-
-        # anything below this cutoff is low density and above is medium density
-        low_linear_density = self.scen_density_dict[ self.low_density_cutoff]
-        # anything above this cutoff is high density
-        medium_linear_density = self.scen_density_dict[self.medium_density_cutoff]
-
-        # Categorize the density into three categories
-        polygons['density_category'] = pd.cut(polygons['conf_linear_density'],
-                                            bins=[float('-inf'), low_linear_density, medium_linear_density, float('inf')],
-                                            labels=['low', 'medium', 'high'])
-
-        # add these categories to the edges_df        
-        merged_df = pd.merge(polygons, edges_df, left_index=True, right_on='flow_group', how='left')
-
-        # Apply conditions based on 'density_category'
-        merged_df['adjusted_length'] = merged_df.apply(lambda row: row['length'] * self.medium_density_weight if row['density_category'] == 'medium' 
-                                                                        else (row['length'] * self.high_density_weight if row['density_category'] == 'high' 
-                                                                                else (row['length'] * self.low_density_weight)), axis=1)
-        # update the TrafficSpawner graph
-        # # Update edge attributes in the graph
-        cluster_edge_lengths = {row.Index: row.adjusted_length for row in merged_df.itertuples()}
-        # also get the edges of the complete graph
-        full_edges = {row.Index: row.length for row in edges_df.itertuples()}
-        
-        # reset the lengths of the traffic spawner graph. These are the original graph lengths
-        for edge_label, length in full_edges.items():
-            bs.traf.TrafficSpawner.graph[edge_label[0]][edge_label[1]][edge_label[2]]['length'] = length 
-
-        # apply the adjusted lengths to the graph
-        for edge_label, adjusted_length in cluster_edge_lengths.items():
-            old_length =  bs.traf.TrafficSpawner.graph[edge_label[0]][edge_label[1]][edge_label[2]]['length']
-            new_length = adjusted_length
-            bs.traf.TrafficSpawner.graph[edge_label[0]][edge_label[1]][edge_label[2]]['length'] = adjusted_length 
-
-        # select indices of edges in the medium or high category
-        selected_indices = merged_df[merged_df['density_category'].isin(['medium', 'high'])].index
-        selected_indices = [f'{u}-{v}' for u,v,_ in selected_indices]
-
-        # save polygons to draw later
-        if self.draw_the_polygons:
-            polygon_colors = {'low': 'green', 'medium': 'blue', 'high': 'red'}
-            for polygon in polygons.itertuples():
-                
-                # if polygon.density_category == 'low':
-                #     continue
-                labels = polygon.flow_group
-                polygon_geom = polygon.geometry
-                polygon_color = polygon_colors[polygon.density_category]
-                
-                self.polygons_to_draw.append((f'CLUSTER{labels}', polygon_geom, polygon_color))
-        
-        return polygons, selected_indices
-    
-    def apply_density_rules_easy(self, polygons, edges_df):
 
         # when there are two clusters or less, just use high category
         if len(polygons) == 1:
@@ -589,14 +521,6 @@ class Clustering(core.Entity):
     @command 
     def SETCLUSTERDISTANCE(self, dist:int):
         self.distance_threshold=dist
-
-        # also set the cluster densut dict as this is final stack command
-        target_ntraf = bs.traf.TrafficSpawner.target_ntraf
-
-        try:
-            self.scen_density_dict = self.density_dictionary[str(target_ntraf)][str(dist)]
-        except KeyError:
-            pass
 
     @command 
     def SETOBSERVATIONTIME(self, time:int):
