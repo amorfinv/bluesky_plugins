@@ -136,7 +136,7 @@ def do_flowcontrol():
         return
     
     # start flow control at 10 mins
-    if bs.sim.simt <= 600:
+    if bs.sim.simt <= bs.traf.clustering.observation_time:
         return
 
     # first apply some geovectors for aircraft
