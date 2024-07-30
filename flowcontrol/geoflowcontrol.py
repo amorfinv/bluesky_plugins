@@ -33,20 +33,6 @@ flowheader = \
     'Number of replan resulting in shorter distance [-]' + \
     'Number of replans giving shortest path [-]\n'
 
-replanheader = \
-    '#######################################################\n' + \
-    'Cluster log LOG\n' + \
-    'Cluster density statistics\n' + \
-    '#######################################################\n\n' + \
-    'Parameters [Units]:\n' + \
-    'Deletion time [s], ' + \
-    'ACID [-], ' + \
-    'Original plan [-], ' + \
-    'Travelled plan [-], ' + \
-    'issame [-], ' + \
-    'n_replans [-], ' + \
-    'replans [-]\n'
-
 
 
 def init_plugin():
@@ -111,11 +97,9 @@ def do_flowcontrol():
         return
     
     # only run on multiples of geovector time limit
-    if not bs.sim.simt % bs.traf.flowcontrol.geovector_time_limit:
+    if bs.sim.simt % bs.traf.flowcontrol.geovector_time_limit:
         return
     
-    print(bs.sim.simt)
-
     # first apply some geovectors for aircraft
     apply_geovectors()
 
