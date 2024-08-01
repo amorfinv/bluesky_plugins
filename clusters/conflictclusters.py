@@ -144,8 +144,6 @@ class Clustering(core.Entity):
     @timed_function(dt=10)
     def clustering(self):
 
-        # delete polygons in screen
-        self.delete_polygons()
 
         if bs.traf.ntraf == 0:
            return
@@ -168,6 +166,13 @@ class Clustering(core.Entity):
         for past_time in keys_to_remove:
             bs.traf.cd.conf_cluster.pop(past_time)
 
+        # Make sure the clustering only happens on multiples of geovector time limit
+        if bs.sim.simt % bs.traf.flowcontrol.geovector_time_limit:
+            return
+
+        # delete polygons in screen
+        self.delete_polygons()
+        
         if len(bs.traf.cd.conf_cluster) == 0:
             return
 

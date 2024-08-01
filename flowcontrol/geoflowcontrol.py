@@ -93,12 +93,15 @@ class FlowControl(core.Entity):
 @core.timed_function(dt=bs.sim.simdt)
 def do_flowcontrol():
 
+    if bs.traf.ntraf == 0:
+        return
+    
     if not bs.traf.flowcontrol.enableflowcontrol:
         return
     
-    # only run on multiples of geovector time limit
-    if bs.sim.simt % bs.traf.flowcontrol.geovector_time_limit:
-        return
+    # # only run on multiples of geovector time limit
+    # if bs.sim.simt % bs.traf.flowcontrol.geovector_time_limit:
+    #     return
     
     # first apply some geovectors for aircraft
     apply_geovectors()
@@ -107,9 +110,22 @@ def do_flowcontrol():
     # update_logging(attempted_replans, succesful_replans, close_turn_replans, longer_replans_old, shorter_replans_old, shortest_path_replan)
 
 def apply_geovectors():
+        
+        in_turn = np.logical_or(bs.traf.ap.inturn, bs.traf.ap.dist2turn < 75)
+        cr_active = bs.traf.cd.inconf
+        lnav_on = bs.traf.swlnav
+
+        # if bs.sim.simt > 600:
+        #     print(bs.traf.id[0])
+        #     print(bs.traf.edgetraffic.actedge.speed_limit[0])
 
        # Give a speed limit depending on cluster
         bs.traf.selspd = np.where(bs.traf.swlnav, bs.traf.edgetraffic.actedge.speed_limit, bs.traf.selspd)
+        # if bs.sim.simt > 600:
+        #     print(bs.traf.selspd[0])
+        #     print('--------------')
+
+        # bs.traf.selspd = np.where(bs.traf.swlnav, bs.traf.actedge.speed_limit, bs.traf.selspd)
     
 
 def update_logging(attempted_replans, succesful_replans, close_turn_replans, longer_replans_old, shorter_replans_old, shortest_path_replan):
