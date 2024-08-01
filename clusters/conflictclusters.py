@@ -285,6 +285,10 @@ class Clustering(core.Entity):
 
         # apply the adjusted lengths to the graph
         for edge_label, adjusted_length in cluster_edge_lengths.items():
+            density_category = merged_df.loc[edge_label]['density_category']
+
+            if density_category == 'low':
+                continue
             bs.traf.TrafficSpawner.graph[edge_label[0]][edge_label[1]][edge_label[2]]['speed_limit'] = 15*kts 
 
         # select indices of edges in the medium or high category
