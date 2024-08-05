@@ -289,6 +289,8 @@ class Clustering(core.Entity):
 
             if density_category == 'low':
                 continue
+            if density_category == 'medium':
+                continue
             bs.traf.TrafficSpawner.graph[edge_label[0]][edge_label[1]][edge_label[2]]['speed_limit'] = 15*kts 
 
         # select indices of edges in the medium or high category
