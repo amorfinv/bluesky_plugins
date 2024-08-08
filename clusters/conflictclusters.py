@@ -148,7 +148,7 @@ class Clustering(core.Entity):
         if bs.traf.ntraf == 0:
            return
         
-        if bs.sim.simt <= self.observation_time:
+        if bs.sim.simt < self.observation_time:
            return
         
         # First convert the aircraft positions to meters

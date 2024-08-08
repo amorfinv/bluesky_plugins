@@ -91,9 +91,9 @@ class FlowControl(core.Entity):
         self.flowlog.start()
 
     @stack.command 
-    def GEOTIME(self, geoactivetime:int, geotime:int):
-        self.geovector_update_time = geotime
+    def GEOTIME(self, geoactivetime:int, updategeotime:int):
         self.geovector_active_time_limit = geoactivetime
+        self.geovector_update_time = updategeotime
 
 
 ######################## FLOW CONTROL FUNCTIONS #########################
@@ -112,7 +112,7 @@ def do_flowcontrol():
     
 
     # only go into this code if past observation time since cluster polygons exist
-    if bs.sim.simt > bs.traf.clustering.observation_time + bs.traf.flowcontrol.geovector_update_time:
+    if bs.sim.simt >= bs.traf.clustering.observation_time:
         
         # now check if you are in a multiple of the
         if bs.sim.simt - bs.traf.flowcontrol.begin_geovector_time < bs.traf.flowcontrol.geovector_active_time_limit:
