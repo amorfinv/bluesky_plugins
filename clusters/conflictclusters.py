@@ -166,9 +166,12 @@ class Clustering(core.Entity):
         for past_time in keys_to_remove:
             bs.traf.cd.conf_cluster.pop(past_time)
 
-        # Make sure the clustering only happens on multiples of geovector time limit
-        if bs.sim.simt % bs.traf.flowcontrol.geovector_time_limit:
+        # Make sure the clustering only happens on multiples of geovector update time limit
+        if bs.sim.simt % bs.traf.flowcontrol.geovector_update_time:
             return
+        
+        # when it happens begin the time limit of the active geovector
+        bs.traf.flowcontrol.begin_geovector_time = bs.sim.simt
 
         # delete polygons in screen
         self.delete_polygons()
@@ -291,7 +294,7 @@ class Clustering(core.Entity):
                 continue
             if density_category == 'medium':
                 continue
-            bs.traf.TrafficSpawner.graph[edge_label[0]][edge_label[1]][edge_label[2]]['speed_limit'] = 15*kts 
+            bs.traf.TrafficSpawner.graph[edge_label[0]][edge_label[1]][edge_label[2]]['speed_limit'] = 20*kts 
 
         # select indices of edges in the medium or high category
         selected_indices = merged_df[merged_df['density_category'].isin(['medium', 'high'])].index

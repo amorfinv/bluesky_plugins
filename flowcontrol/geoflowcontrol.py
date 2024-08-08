@@ -1,4 +1,7 @@
 import numpy as np
+import geopandas as gpd
+import pandas as pd
+from shapely.geometry import Point
 import networkx as nx
 import osmnx as ox
 from itertools import groupby
@@ -54,8 +57,9 @@ class FlowControl(core.Entity):
     def __init__(self):
         super().__init__() 
 
-        self.geovector_time_limit = 60
-        self.enableflowcontrol = False
+        self.geovector_update_time = 60
+        self.geovector_active_time_limit = 30
+        self.begin_geovector = 0
         self.flowlog = datalog.crelog('FLOWLOG', None, flowheader)
 
         with self.settrafarrays():
@@ -67,8 +71,10 @@ class FlowControl(core.Entity):
         self.last_geovector[-n:] = -99999
 
     def reset(self):
-        
-        self.geovector_time_limit = 60
+
+        self.geovector_update_time = 60
+        self.geovector_active_time_limit = 30
+        self.begin_geovector_time = 0
         self.enableflowcontrol = False
         self.flowlog = datalog.crelog('FLOWLOG', None, flowheader)
         
@@ -85,8 +91,10 @@ class FlowControl(core.Entity):
         self.flowlog.start()
 
     @stack.command 
-    def GEOTIME(self, geotime:int):
-        self.geovector_time_limit = geotime
+    def GEOTIME(self, geoactivetime:int, geotime:int):
+        self.geovector_update_time = geotime
+        self.geovector_active_time_limit = geoactivetime
+
 
 ######################## FLOW CONTROL FUNCTIONS #########################
 
@@ -99,34 +107,36 @@ def do_flowcontrol():
     if not bs.traf.flowcontrol.enableflowcontrol:
         return
     
-    # # only run on multiples of geovector time limit
-    # if bs.sim.simt % bs.traf.flowcontrol.geovector_time_limit:
-    #     return
+    # set the classic speedlimit
+    bs.traf.selspd = np.where(bs.traf.swlnav, bs.traf.edgetraffic.actedge.speed_limit, bs.traf.selspd)
     
-    # first apply some geovectors for aircraft
-    apply_geovectors()
 
-    # # update logging
-    # update_logging(attempted_replans, succesful_replans, close_turn_replans, longer_replans_old, shorter_replans_old, shortest_path_replan)
-
-def apply_geovectors():
+    # only go into this code if past observation time since cluster polygons exist
+    if bs.sim.simt > bs.traf.clustering.observation_time + bs.traf.flowcontrol.geovector_update_time:
         
-        in_turn = np.logical_or(bs.traf.ap.inturn, bs.traf.ap.dist2turn < 75)
-        cr_active = bs.traf.cd.inconf
-        lnav_on = bs.traf.swlnav
-
-        # if bs.sim.simt > 600:
-        #     print(bs.traf.id[0])
-        #     print(bs.traf.edgetraffic.actedge.speed_limit[0])
-
-       # Give a speed limit depending on cluster
-        bs.traf.selspd = np.where(bs.traf.swlnav, bs.traf.edgetraffic.actedge.speed_limit, bs.traf.selspd)
-        # if bs.sim.simt > 600:
-        #     print(bs.traf.selspd[0])
-        #     print('--------------')
-
-        # bs.traf.selspd = np.where(bs.traf.swlnav, bs.traf.actedge.speed_limit, bs.traf.selspd)
+        # now check if you are in a multiple of the
+        if bs.sim.simt - bs.traf.flowcontrol.begin_geovector_time < bs.traf.flowcontrol.geovector_active_time_limit:
+            # first apply some geovectors for aircraft
+            apply_geovectors()
     
+def apply_geovectors():
+    
+        # check if aircraft are intersecting a cluster polygon
+        # First convert the aircraft positions to meters
+        x,y = bs.traf.clustering.transformer_to_utm.transform(bs.traf.lat, bs.traf.lon)
+        # define a geoseries
+        point_list = [Point(xp,yp) for xp,yp in zip(x,y)]
+        point_geoseries = gpd.GeoSeries(point_list, crs='EPSG:28992')
+        bs.traf.clustering.aircraft_intersect(bs.traf.clustering.cluster_polygons, point_geoseries)
+
+        flow_group_to_density = bs.traf.clustering.cluster_polygons.set_index('flow_group')['density_category'].to_dict()
+        flow_groups_series = pd.Series(bs.traf.clustering.cluster_labels)
+        density_series = flow_groups_series.map(lambda x: 1 if flow_group_to_density.get(x) == 'high' else 0)
+        density_array = density_series.to_numpy()
+        aircraft_to_slowdown = density_array
+        speed_limits = np.where(aircraft_to_slowdown, 15*kts, 20*kts)
+
+        bs.traf.selspd = np.where(bs.traf.swlnav, speed_limits, bs.traf.selspd)
 
 def update_logging(attempted_replans, succesful_replans, close_turn_replans, longer_replans_old, shorter_replans_old, shortest_path_replan):
     if attempted_replans == 0:
