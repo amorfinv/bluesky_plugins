@@ -394,7 +394,7 @@ class SyntheticTrafficSpawner(Entity):
         # Turn lnav on for this aircraft
         stack.stack(f'LNAV {acid} ON')
         stack.stack(f'VNAV {acid} ON')
-        stack.stack(f'COLOUR {acid} 0,191,255')
+        stack.stack(f'COLOUR {acid} BLUE')
 
         # save the create time
         self.create_time[acidx] = bs.sim.simt
@@ -494,7 +494,7 @@ class SyntheticTrafficSpawner(Entity):
             if mission_type == 'conflictzone2':
                 stack.stack(f'COLOUR {acid} RED')
             else:
-                stack.stack(f'COLOUR {acid} 0,191,255')
+                stack.stack(f'COLOUR {acid} BLUE')
 
 
             # save the create time
