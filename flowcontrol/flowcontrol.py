@@ -144,9 +144,9 @@ class FlowControl(core.Entity):
 @core.timed_function(dt=bs.sim.simdt)
 def do_flowcontrol():
 
+    # here ensure this only happens for multiples of flow update rate
     if not bs.sim.simt % bs.traf.flowcontrol.flow_update_rate:
 
-        print(bs.sim.simt)
         if not bs.traf.flowcontrol.enableflowcontrol:
             return
         

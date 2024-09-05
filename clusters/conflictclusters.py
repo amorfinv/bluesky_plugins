@@ -148,10 +148,8 @@ class Clustering(core.Entity):
     @timed_function(dt=bs.sim.simdt)
     def clustering(self):
 
-        # here ensure this only happens for multiples of cluster update
+        # here ensure this only happens for multiples of flow update rate
         if not bs.sim.simt % bs.traf.flowcontrol.flow_update_rate:
-
-            print(bs.sim.simt)
 
             # delete polygons in screen
             self.delete_polygons()
