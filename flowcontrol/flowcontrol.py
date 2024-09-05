@@ -74,6 +74,9 @@ class FlowControl(core.Entity):
         # default replan ratio
         self.replan_ratio = 0.5
 
+        # make flow control update rate. Flow control only happens at these values
+        self.flow_update_rate = 10
+
         # create the replan seeds
         self.replan_rng = np.random.default_rng()
 
@@ -95,6 +98,9 @@ class FlowControl(core.Entity):
 
         # default replan ratio
         self.replan_ratio = 0.5
+
+        # make flow control update rate. Flow control only happens at these values
+        self.flow_update_rate = 10
 
         # create the replan seeds
         self.ac_replan_rng = np.random.default_rng()
@@ -127,29 +133,38 @@ class FlowControl(core.Entity):
         self.flowlog.start()
         self.replanlog.start()
 
+    @stack.command 
+    def FLOWUPDATERATE(self, time:int):
+        # make flow time multiple. CLustering only happens at these values
+        self.flow_update_rate = time
+    
+
 ######################## FLOW CONTROL FUNCTIONS #########################
 
-@core.timed_function(dt=10)
+@core.timed_function(dt=bs.sim.simdt)
 def do_flowcontrol():
 
-    if not bs.traf.flowcontrol.enableflowcontrol:
-        return
-    
-    # start flow control at 10 mins
-    if bs.sim.simt <= 600:
-        return
+    if not bs.sim.simt % bs.traf.flowcontrol.flow_update_rate:
 
-    # first apply some geovectors for aircraft
-    apply_geovectors()
+        print(bs.sim.simt)
+        if not bs.traf.flowcontrol.enableflowcontrol:
+            return
+        
+        # start flow control at 10 mins
+        if bs.sim.simt <= 600:
+            return
 
-    # select which aircraft need to replan
-    acid_to_replan = aircraft_to_replan()
+        # first apply some geovectors for aircraft
+        apply_geovectors()
 
-    # replan the planns
-    attempted_replans, succesful_replans, close_turn_replans, longer_replans_old, shorter_replans_old, shortest_path_replan = replan(acid_to_replan)
+        # select which aircraft need to replan
+        acid_to_replan = aircraft_to_replan()
 
-    # update logging
-    update_logging(attempted_replans, succesful_replans, close_turn_replans, longer_replans_old, shorter_replans_old, shortest_path_replan)
+        # replan the planns
+        attempted_replans, succesful_replans, close_turn_replans, longer_replans_old, shorter_replans_old, shortest_path_replan = replan(acid_to_replan)
+
+        # update logging
+        update_logging(attempted_replans, succesful_replans, close_turn_replans, longer_replans_old, shorter_replans_old, shortest_path_replan)
 
 def apply_geovectors():
     pass
