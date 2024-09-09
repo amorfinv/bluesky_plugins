@@ -311,8 +311,11 @@ class Clustering(core.Entity):
 
         # get linear length of each edge that is part of flow group
         grouped_lengths = new_edges.groupby('flow_group')['length'].sum()
-        grouped_lengths = grouped_lengths.drop(-1)
-        
+
+        # check if -1 exists
+        if -1 in grouped_lengths.index:       
+            grouped_lengths = grouped_lengths.drop(-1)
+
         # sort both to make sure it is in correct order
         grouped_lengths = grouped_lengths.sort_index()
         polygons = polygons.sort_index()
