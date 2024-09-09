@@ -90,6 +90,8 @@ class Clustering(core.Entity):
         self.low_density_cutoff = '0.25'
         self.medium_density_cutoff = '0.50'
 
+        self.voronoi_polygons = None
+
         with self.settrafarrays():
             self.cluster_labels = np.array([])
 
@@ -129,6 +131,9 @@ class Clustering(core.Entity):
         # set the density cutoff
         self.low_density_cutoff = '0.25'
         self.medium_density_cutoff = '0.50'
+
+        self.voronoi_polygons = None
+
 
         with self.settrafarrays():
             self.cluster_labels = np.array([])
@@ -182,26 +187,16 @@ class Clustering(core.Entity):
             # make the observation matrix from the conflicts
             lat_lon_confs = np.vstack(list(bs.traf.cd.conf_cluster.values()))
             x,y = self.transformer_to_utm.transform(lat_lon_confs[:,0],lat_lon_confs[:,1])
-            features = np.column_stack((x, y))
-            
-            if len(features) == 0:
+
+            if len(x) == 0:
                 return
-            
-            # here we order the observations for peace of mind and round
-            features = features[np.argsort(features[:, 0])]
-            # features = np.round(features)
 
-            # normalize the observation matrix
-            whitened = whiten(features)
-
-            # do clustering and return the optimal labels
-            optimal_labels = calgos.ward(features, self.distance_threshold)
-
-            # get number of clusters
-            n_clusters = np.max(optimal_labels)+1
-
-            # polygonize cluster the clusters
-            polygons = self.polygonize(optimal_labels, features, n_clusters)
+            # make it a geosereis
+            points = gpd.GeoDataFrame(geometry=[Point(x, y) for x, y in zip(x,y)], crs='EPSG:28992') 
+       
+            # polygonize the clusters
+            # TODO: this is a stupid way to do this but it means the code barely changes
+            polygons = self.polygonize(points)
             
             if polygons.empty:
                 return
@@ -446,38 +441,22 @@ class Clustering(core.Entity):
         
         return new_edges_df, polygons
   
-    def polygonize(self, optimal_labels, features, n_clusters, buffer_dist=bs.settings.asas_pzr):
+    def polygonize(self, points):
         
-        # loop through all of the clusters and create a polygon
-        polygon_data = {'flow_group': [], 'geometry': [], 'conf_count': []}
-         
-        for optimal_label in range(n_clusters):
-            label_mask = optimal_labels == optimal_label
-            cluster_points = features[label_mask,:]
+        # check intersections of point geoseries and         
+        gdf_joined = gpd.sjoin(points, self.voronoi_polygons, how="left", op="within")
+        poly_gdf = self.voronoi_polygons.copy(deep=True)
 
-            # ensure you only keep unique coordinates
-            cluster_points = np.unique(cluster_points, axis=0)
-            
-            # skip if less than minimum
-            if cluster_points.shape[0] <= self.min_ntraf:
-                    continue
-            hull = ConvexHull(cluster_points)
-            polygon = Polygon(cluster_points[hull.vertices])
-            polygon = polygon.buffer(buffer_dist*nm)
+        # Step 2: Count the points in each polygon
+        # The 'index_right' is the index of the polygons from the spatial join
+        point_counts = gdf_joined.groupby('index_right').size()
 
-            polygon_data['flow_group'].append(optimal_label)
-            polygon_data['geometry'].append(polygon)
-            polygon_data['conf_count'].append(cluster_points.shape[0])
+        # Step 3: Add the point count as a new column to the polygons GeoDataFrame
+        poly_gdf['conf_count'] = poly_gdf.index.map(point_counts).fillna(0).astype(int)
+        poly_gdf = poly_gdf[poly_gdf['conf_count'] > 0]
 
-        # create geodataframe of polygons
-        poly_gdf = gpd.GeoDataFrame(polygon_data, index=polygon_data['flow_group'], crs='EPSG:28992')
+        poly_gdf['flow_group'] = poly_gdf.index
 
-        # set the lavels as the index
-        # # check for potential intersections
-        # *_,intersections = poly_gdf.sindex.query_bulk(poly_gdf['geometry'], predicate="intersects")
-        # if len(intersections) != len(poly_gdf):
-        #      print('self intersecting polygons')
-        
         return poly_gdf
 
     def draw_polygons(self):
@@ -529,8 +508,7 @@ class Clustering(core.Entity):
     def SETCLUSTERDISTANCE(self, dist:int):
         self.distance_threshold=dist
 
-        flow_group_graph = ox.load_graphml(f'plugins/scenario_maker/Rotterdam/{dist}.graphml')
-        print(flow_group_graph)
+        self.voronoi_polygons = gpd.read_file(f'plugins/scenario_maker/Rotterdam/voronoi{dist}.gpkg')
 
     @command 
     def SETOBSERVATIONTIME(self, time:int):
