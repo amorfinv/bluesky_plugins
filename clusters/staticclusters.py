@@ -441,7 +441,7 @@ class Clustering(core.Entity):
         
         return new_edges_df, polygons
   
-    def polygonize(self, points):
+    def polygonize(self, points) -> gpd.GeoDataFrame:
         
         # check intersections of point geoseries and         
         gdf_joined = gpd.sjoin(points, self.voronoi_polygons, how="left", op="within")
